@@ -26,7 +26,7 @@ export default  function Home() {
 
 function SignOut({supabase}:{supabase: SupabaseClient}){
 
-  const router = useRouter()
+  const router = useRouter();
 
   async function onSignOutClick(){
     const { data: { user } } = await supabase.auth.getUser()

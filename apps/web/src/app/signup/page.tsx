@@ -10,23 +10,6 @@ import { createClient } from "@/lib/supabase/client";
 export default function Signup(){
     
 
-
-    // const [buttonText, setButtonText] = useState("Dont click!");
-
-    // const warning = 'I WILL FIND YOU!! ';
-    // const pain = 'FUCK ';
-    
-    // function handleClick(){
-
-    //     if(buttonText.length > 40 && buttonText.charAt(0) == 'D')
-    //         setButtonText('I WIll FIND YOU!')
-    //     else if(buttonText.length < 70 && buttonText.charAt(0) != 'i')
-    //         setButtonText(buttonText + ' FUCK ');
-    //     else
-    //         setButtonText('i give up');
-
-    // }
-
     return (
         <div>
             <br/><br/>
@@ -40,53 +23,6 @@ export default function Signup(){
 
 }
 
-
-function MyButton({ buttonText, handleClick } : { buttonText: string, handleClick: () => void })  {
-
-
-    return (
-        <Button onClick={handleClick}>
-            { buttonText }
-        </Button>
-    );
-}
-
-function SignUpFunForm(){
-
-
-    return(
-        <div className="bg-gray-300 p-5">
-            <form onSubmit=
-            
-            
-            {(e) => {
-                e.preventDefault()
-                const form = e.target as HTMLFormElement
-                const email = form.email.value
-                const password = form.password.value
-                console.log(email, password)
-
-
-            }}>
-                <h1 className="text-2xl font-bold mb-4">Sign Up</h1>
-
-                <div className="mb-3">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" name="email" type="email" />
-                </div>
-
-                <div className="mb-3">
-                <Label htmlFor="password">Password</Label>
-                <Input id="password" name="password" type="password" />
-                </div>
-
-                <Button type="submit">Sign Up</Button>
-            </form>
-        </div>
-    );
-
-
-}
 
 
 
