@@ -37,23 +37,23 @@ function SignUpForm(){
             
             
             {async (e) => {
-                e.preventDefault()
-                setError("")
-                const form = e.target as HTMLFormElement
-                const email = form.email.value
-                const password = form.password.value
-                console.log(email, password)
+                e.preventDefault();
+                setError("");
+                const form = e.target as HTMLFormElement;
+                const email = form.email.value;
+                const password = form.password.value;
 
-
-                const{error} = await supabase.auth.signUp({
+                const {error} = await supabase.auth.signUp({
                     email,
                     password
-                })
-
+                });
+                
+               
                 if (error) {
                     setError(error.message)
                 } else {
-                    router.push("/")
+                    console.log("Congratulations!! " + email + " user created!");
+                    router.push("/onboarding");
                 }
 
 

@@ -95,6 +95,7 @@ function OnboardingForm({supabase}:{supabase: SupabaseClient}){
             .eq('id', user?.id)
 
         if(!error){
+            console.log('Welcome!! ' +  username + ', You look lovely today!' );
             router.push('/');
             return;
         }
@@ -102,7 +103,7 @@ function OnboardingForm({supabase}:{supabase: SupabaseClient}){
     }
 
     return(
-        <div className="ml-50 mr-50">
+        <div className="ml-30 mr-30">
             <Label htmlFor="displayName"> Enter Display Name </Label>
             <Input
                 id='displayName'
