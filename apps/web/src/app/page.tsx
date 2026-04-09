@@ -66,3 +66,8 @@ function CheckIfLoggedIn({supabase}:{supabase: SupabaseClient}){
     </Button>
   )
 }
+
+/*
+ write a function that gets user data 
+ write a funtion that gets users active goals
+*/
