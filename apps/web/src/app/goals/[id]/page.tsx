@@ -11,6 +11,8 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 type Goal = any;
+type Milestone = any;
+type Checkin = any;
 
 export default function GoalDetail() {
   const params = useParams();
@@ -19,6 +21,12 @@ export default function GoalDetail() {
   const [goal, setGoal] = useState<Goal | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Timeline data has its own loading state so the page header/stats can
+  // render immediately while the milestones + checkins calls are in flight.
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [checkins, setCheckins] = useState<Checkin[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(true);
 
   const loadGoal = useCallback(async () => {
     setLoading(true);
@@ -42,17 +50,43 @@ export default function GoalDetail() {
     }
   }, [goalId]);
 
+  // Milestones + checkins fetched together so the timeline has a single
+  // loading state. Failures here are silent — an empty timeline is a
+  // better failure mode than blocking the rest of the page.
+  const loadTimeline = useCallback(async () => {
+    setTimelineLoading(true);
+    try {
+      const [mRes, cRes] = await Promise.all([
+        fetch(`/api/milestones/${goalId}`),
+        fetch(`/api/checkins/${goalId}`),
+      ]);
+      const mJson = await mRes.json();
+      const cJson = await cRes.json();
+      setMilestones(mJson.milestones ?? []);
+      setCheckins(cJson.checkins ?? []);
+    } catch {
+      setMilestones([]);
+      setCheckins([]);
+    } finally {
+      setTimelineLoading(false);
+    }
+  }, [goalId]);
+
   useEffect(() => {
     loadGoal();
+    loadTimeline();
 
     // Same bfcache safety net as the home page — refetch when the
     // browser restores the page from its back-forward cache.
     function handlePageShow(e: PageTransitionEvent) {
-      if (e.persisted) loadGoal();
+      if (e.persisted) {
+        loadGoal();
+        loadTimeline();
+      }
     }
     window.addEventListener("pageshow", handlePageShow);
     return () => window.removeEventListener("pageshow", handlePageShow);
-  }, [loadGoal]);
+  }, [loadGoal, loadTimeline]);
 
   return (
     <main className="w-full max-w-4xl mx-auto px-4 py-6">
@@ -69,6 +103,12 @@ export default function GoalDetail() {
           <GoalHeader goal={goal} />
           <StatsBar goal={goal} />
           <MetaInfo goal={goal} />
+          <TimelineSection
+            goal={goal}
+            milestones={milestones}
+            checkins={checkins}
+            loading={timelineLoading}
+          />
         </>
       )}
     </main>
@@ -215,5 +255,217 @@ function MetaItem({ label, value }: { label: string; value: string }) {
       </div>
       <div className="text-sm mt-1">{value}</div>
     </div>
+  );
+}
+
+// ----------------------------------------------------------------------
+// Timeline
+// ----------------------------------------------------------------------
+
+type TimelineItem = {
+  kind: "checkin" | "milestone-reached" | "milestone-pending" | "goal-end";
+  timestamp: string | null;
+  data: any;
+};
+
+function TimelineSection({
+  goal,
+  milestones,
+  checkins,
+  loading,
+}: {
+  goal: Goal;
+  milestones: Milestone[];
+  checkins: Checkin[];
+  loading: boolean;
+}) {
+  // Collapsible "dropdown" — default open so the user sees everything on
+  // first load. State is section-local because toggling has no side effects.
+  const [expanded, setExpanded] = useState(true);
+
+  // Build two sorted buckets out of the raw arrays:
+  //   past     — check-ins + reached milestones, oldest → newest
+  //   upcoming — pending milestones, earliest → latest
+  // The goal-end marker is appended separately after upcoming so it's
+  // always the very last row.
+  const { past, upcoming } = buildTimeline(checkins, milestones);
+
+  return (
+    <section className="mt-10">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center gap-2 mb-3 text-xs uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <span>{expanded ? "▾" : "▸"}</span>
+        <span>timeline</span>
+      </button>
+
+      {expanded && (
+        <Card>
+          <CardContent className="py-4">
+            {loading ? (
+              <p className="text-sm text-muted-foreground">
+                loading timeline...
+              </p>
+            ) : past.length === 0 &&
+              upcoming.length === 0 &&
+              !goal.target_completion_at ? (
+              <p className="text-sm text-muted-foreground">nothing yet.</p>
+            ) : (
+              <ol className="flex flex-col">
+                {past.map((item, i) => (
+                  <TimelineRow key={`past-${i}`} item={item} dimmed={false} />
+                ))}
+                {upcoming.map((item, i) => (
+                  <TimelineRow key={`up-${i}`} item={item} dimmed={true} />
+                ))}
+                {/* Goal end is always last. Dimmed unless the goal is
+                    actually completed — an active or dropped goal hasn't
+                    reached its finish line yet. */}
+                <TimelineRow
+                  item={{
+                    kind: "goal-end",
+                    timestamp: goal.target_completion_at ?? null,
+                    data: goal,
+                  }}
+                  dimmed={goal.status !== "completed"}
+                />
+              </ol>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </section>
+  );
+}
+
+function buildTimeline(checkins: Checkin[], milestones: Milestone[]) {
+  const past: TimelineItem[] = [];
+  const upcoming: TimelineItem[] = [];
+
+  for (const c of checkins) {
+    past.push({ kind: "checkin", timestamp: c.created_at, data: c });
+  }
+
+  for (const m of milestones) {
+    if (m.reached_at) {
+      past.push({
+        kind: "milestone-reached",
+        timestamp: m.reached_at,
+        data: m,
+      });
+    } else {
+      upcoming.push({
+        kind: "milestone-pending",
+        timestamp: m.target_date,
+        data: m,
+      });
+    }
+  }
+
+  const byTime = (a: TimelineItem, b: TimelineItem) =>
+    new Date(a.timestamp ?? 0).getTime() -
+    new Date(b.timestamp ?? 0).getTime();
+
+  past.sort(byTime);
+  upcoming.sort(byTime);
+
+  return { past, upcoming };
+}
+
+function TimelineRow({
+  item,
+  dimmed,
+}: {
+  item: TimelineItem;
+  dimmed: boolean;
+}) {
+  const date = item.timestamp
+    ? new Date(item.timestamp).toLocaleDateString()
+    : "—";
+
+  let marker: React.ReactNode;
+  let label: string;
+  let details: React.ReactNode = null;
+
+  if (item.kind === "checkin") {
+    marker = <Dot filled size="sm" />;
+    label = "check-in";
+    details = (
+      <>
+        {item.data.metric_value != null && (
+          <span className="text-xs text-muted-foreground">
+            value: {item.data.metric_value}
+          </span>
+        )}
+        {item.data.notes && (
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {item.data.notes}
+          </p>
+        )}
+      </>
+    );
+  } else if (item.kind === "milestone-reached") {
+    marker = <Dot filled size="md" />;
+    label = `milestone ${item.data.order_index ?? ""} reached`.trim();
+    if (item.data.message) {
+      details = (
+        <p className="mt-0.5 text-xs italic text-muted-foreground">
+          &ldquo;{item.data.message}&rdquo;
+        </p>
+      );
+    }
+  } else if (item.kind === "milestone-pending") {
+    marker = <Dot size="md" />;
+    label = `milestone ${item.data.order_index ?? ""}`.trim();
+    if (item.data.message) {
+      details = (
+        <p className="mt-0.5 text-xs italic text-muted-foreground">
+          &ldquo;{item.data.message}&rdquo;
+        </p>
+      );
+    }
+  } else {
+    // goal-end
+    marker = <GoalEndMark />;
+    label = "goal end";
+  }
+
+  return (
+    <li
+      className={`flex items-start gap-3 py-2 ${dimmed ? "opacity-40" : ""}`}
+    >
+      <div className="flex items-center justify-center shrink-0 w-4 pt-1.5">
+        {marker}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className="text-sm">{label}</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            {date}
+          </span>
+        </div>
+        {details}
+      </div>
+    </li>
+  );
+}
+
+function Dot({
+  filled = false,
+  size = "md",
+}: {
+  filled?: boolean;
+  size?: "sm" | "md";
+}) {
+  const dim = size === "sm" ? "h-1.5 w-1.5" : "h-2.5 w-2.5";
+  const fill = filled ? "bg-foreground" : "border border-foreground";
+  return <div className={`${dim} ${fill} rounded-full`} />;
+}
+
+function GoalEndMark() {
+  return (
+    <span className="text-sm font-bold leading-none select-none">×</span>
   );
 }
