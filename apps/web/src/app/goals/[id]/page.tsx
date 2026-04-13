@@ -103,6 +103,13 @@ export default function GoalDetail() {
           <GoalHeader goal={goal} />
           <StatsBar goal={goal} />
           <MetaInfo goal={goal} />
+          {goal.status === "active" && (
+            <CheckInForm
+              goalId={goalId}
+              benchmarkName={goal.benchmark_name}
+              onCheckinCreated={loadTimeline}
+            />
+          )}
           <TimelineSection
             goal={goal}
             milestones={milestones}
@@ -259,6 +266,129 @@ function MetaItem({ label, value }: { label: string; value: string }) {
 }
 
 // ----------------------------------------------------------------------
+// Check-in form
+// ----------------------------------------------------------------------
+
+function CheckInForm({
+  goalId,
+  benchmarkName,
+  onCheckinCreated,
+}: {
+  goalId: string;
+  benchmarkName: string | null;
+  onCheckinCreated: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [metricValue, setMetricValue] = useState("");
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/checkins/${goalId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          metric_value: metricValue ? Number(metricValue) : null,
+          notes: notes.trim() || null,
+        }),
+      });
+
+      if (!res.ok) {
+        const json = await res.json();
+        setError(json.error ?? "failed to check in");
+        return;
+      }
+
+      // Reset form, close it, and refresh the timeline
+      setMetricValue("");
+      setNotes("");
+      setOpen(false);
+      onCheckinCreated();
+    } catch {
+      setError("something went wrong");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="mt-10">
+      {!open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="w-full border border-dashed border-muted-foreground/40 rounded-lg py-3 text-sm text-muted-foreground hover:text-foreground hover:border-foreground transition-colors"
+        >
+          + check in
+        </button>
+      ) : (
+        <Card>
+          <CardContent className="py-4">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+              <div>
+                <label className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {benchmarkName ?? "value"}
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={metricValue}
+                  onChange={(e) => setMetricValue(e.target.value)}
+                  placeholder="0"
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  notes
+                </label>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={2}
+                  placeholder="optional"
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
+                />
+              </div>
+
+              {error && (
+                <p className="text-xs text-red-500">{error}</p>
+              )}
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="rounded-md bg-foreground text-background px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+                >
+                  {submitting ? "saving..." : "submit"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    setError(null);
+                  }}
+                  className="rounded-md border px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  cancel
+                </button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+    </section>
+  );
+}
+
+// ----------------------------------------------------------------------
 // Timeline
 // ----------------------------------------------------------------------
 
@@ -315,10 +445,10 @@ function TimelineSection({
             ) : (
               <ol className="flex flex-col">
                 {past.map((item, i) => (
-                  <TimelineRow key={`past-${i}`} item={item} dimmed={false} />
+                  <TimelineRow key={`past-${i}`} item={item} dimmed={false} benchmarkName={goal.benchmark_name} />
                 ))}
                 {upcoming.map((item, i) => (
-                  <TimelineRow key={`up-${i}`} item={item} dimmed={true} />
+                  <TimelineRow key={`up-${i}`} item={item} dimmed={true} benchmarkName={goal.benchmark_name} />
                 ))}
                 {/* Goal end is always last. Dimmed unless the goal is
                     actually completed — an active or dropped goal hasn't
@@ -377,9 +507,11 @@ function buildTimeline(checkins: Checkin[], milestones: Milestone[]) {
 function TimelineRow({
   item,
   dimmed,
+  benchmarkName,
 }: {
   item: TimelineItem;
   dimmed: boolean;
+  benchmarkName?: string | null;
 }) {
   const date = item.timestamp
     ? new Date(item.timestamp).toLocaleDateString()
@@ -396,7 +528,7 @@ function TimelineRow({
       <>
         {item.data.metric_value != null && (
           <span className="text-xs text-muted-foreground">
-            value: {item.data.metric_value}
+            {benchmarkName ?? "value"}: {item.data.metric_value}
           </span>
         )}
         {item.data.notes && (
