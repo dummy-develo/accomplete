@@ -1,4 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
+import { createMilestones } from "./milestones";
 
 const ALLOWED_UPDATE_FIELDS = [
     'goal_name', 'goal_description', 'goal_type',
@@ -53,8 +54,8 @@ export async function getGoalById(supabase: SupabaseClient
         .single();
 }
 
-export async function createGoal(supabase: SupabaseClient, 
-    userId: string, 
+export async function createGoal(supabase: SupabaseClient,
+    userId: string,
     body: Record<string, unknown>
 ) {
     const newGoal = {
@@ -71,11 +72,87 @@ export async function createGoal(supabase: SupabaseClient,
         is_public: body.is_public,
     };
 
-    return await supabase
+    // Insert the goal row
+    const { data: goal, error: goalError } = await supabase
         .from('goals')
         .insert(newGoal)
         .select()
         .single();
+
+    if (goalError || !goal) {
+        return { data: null, error: goalError };
+    }
+
+    // Auto-generate milestones based on goal duration
+    const milestoneRows = generateMilestoneRows(goal.id, userId, goal.target_completion_at, goal.created_at);
+    const milestoneCount = milestoneRows.length;
+
+    if (milestoneCount > 0) {
+        const { error: msError } = await createMilestones(supabase, milestoneRows);
+
+        if (msError) {
+            // Milestone creation failed — delete the goal to avoid partial state
+            await supabase.from('goals').delete().eq('id', goal.id);
+            return { data: null, error: { message: 'Failed to create milestones' } };
+        }
+
+        // Store the count on the goal row
+        await supabase
+            .from('goals')
+            .update({ total_milestones: milestoneCount })
+            .eq('id', goal.id);
+    }
+
+    return { data: { ...goal, total_milestones: milestoneCount }, error: null };
+}
+
+// Determines how many milestones a goal gets based on its duration.
+// Under 30 days → 1, 30–90 days → 3, 90+ days → 5.
+function getMilestoneCount(durationDays: number): number {
+    if (durationDays < 30) return 1;
+    if (durationDays <= 90) return 3;
+    return 5;
+}
+
+// Builds milestone row objects evenly spaced across the goal timeline.
+// Each milestone lands at i/(N+1) of the way through, so the last one
+// is always before the goal's end date, never coinciding with it.
+// All target_dates are set to midnight UTC for clean display.
+function generateMilestoneRows(
+    goalId: string,
+    userId: string,
+    targetCompletionAt: string,
+    createdAt: string,
+) {
+    const start = new Date(createdAt);
+    const end = new Date(targetCompletionAt);
+    const durationMs = end.getTime() - start.getTime();
+    const durationDays = durationMs / (1000 * 60 * 60 * 24);
+
+    if (durationDays <= 0) return [];
+
+    const count = getMilestoneCount(durationDays);
+    const rows = [];
+
+    for (let i = 1; i <= count; i++) {
+        // Place at i/(count+1) of the timeline
+        const fraction = i / (count + 1);
+        const targetDate = new Date(start.getTime() + durationMs * fraction);
+
+        // Snap to midnight UTC
+        targetDate.setUTCHours(0, 0, 0, 0);
+
+        rows.push({
+            goal_id: goalId,
+            user_id: userId,
+            order_index: i,
+            target_date: targetDate.toISOString(),
+            checkin_score_at_creation: 0,
+            points_earned: 0,
+        });
+    }
+
+    return rows;
 }
 
 export async function updateGoal(
