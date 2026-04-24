@@ -1,4 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
+import { scoreCheckin, scoreMilestoneReach } from "./scoring";
 
 export async function getCheckinsByGoal(
     supabase: SupabaseClient,
@@ -20,10 +21,10 @@ export async function createCheckin(
     userId: string,
     body: Record<string, unknown>
 ) {
-    // Verify goal belongs to user and is active
+    // Fetch goal with all fields needed for scoring
     const { data: goal, error: goalError } = await supabase
         .from('goals')
-        .select('id, checkin_value')
+        .select('id, user_id, checkin_value, score_checkin, score_milestone, last_checkin_date, status, is_deleted')
         .eq('id', goalId)
         .eq('user_id', userId)
         .eq('status', 'active')
@@ -34,35 +35,35 @@ export async function createCheckin(
         return { data: null, error: { message: 'Goal not found or not active' } };
     }
 
-    // TODO: Scoring logic
-    // 1. Fetch the goal's checkin_value (already fetched above in `goal`)
-    // 2. Set points_earned = checkin_value
-    // 3. Update goals.score_checkin (add points_earned)
-    // 4. Update profiles.total_score (add points_earned)
-    //
-    // TODO: Streak logic
-    // 1. Check if this checkin is on time (based on checkin_frequency)
-    // 2. If on time: increment goals.current_streak, update goals.best_streak if needed
-    // 3. Update profiles.global_streak and profiles.highest_streak
-    //
-    // TODO: Milestone check
-    // 1. Check if any milestone target_date has been reached
-    // 2. If so, calculate milestone bonus and update milestone.points_earned
-    // 3. Update goals.score_milestone
-
-    const newCheckin = {
-        goal_id: goalId,
-        user_id: userId,
-        metric_value: body.metric_value,
-        notes: body.notes,
-        points_earned: 0, // TODO: replace with checkin_value from goal
-    };
-
-    return await supabase
+    // Insert the check-in with 0 points initially — scoring updates it if earned
+    const { data: checkin, error: checkinError } = await supabase
         .from('checkins')
-        .insert(newCheckin)
+        .insert({
+            goal_id: goalId,
+            user_id: userId,
+            metric_value: body.metric_value,
+            notes: body.notes,
+            points_earned: 0,
+        })
         .select()
         .single();
+
+    if (checkinError || !checkin) {
+        return { data: null, error: checkinError };
+    }
+
+    // Score the check-in (10 pts if first of the day, 0 otherwise)
+    const { pointsEarned } = await scoreCheckin(supabase, goal, checkin.id);
+
+    // Check for milestones that have reached their target_date
+    const { reachedMilestones } = await scoreMilestoneReach(supabase, goal);
+
+    // Return the check-in with its actual points and any reached milestones
+    return {
+        data: { ...checkin, points_earned: pointsEarned },
+        error: null,
+        reachedMilestones,
+    };
 }
 
 export async function deleteCheckin(

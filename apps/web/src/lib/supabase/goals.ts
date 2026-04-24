@@ -1,5 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { createMilestones } from "./milestones";
+import { scoreGoalCompletion } from "./scoring";
+import { BASE_CHECKIN_VALUE, getMilestoneCount } from "../constants";
 
 const ALLOWED_UPDATE_FIELDS = [
     'goal_name', 'goal_description', 'goal_type',
@@ -65,8 +67,9 @@ export async function createGoal(supabase: SupabaseClient,
         goal_type: body.goal_type,
         benchmark_name: body.benchmark_name,
         benchmark_target_value: body.benchmark_target_value,
-        checkin_frequency: body.checkin_frequency,
-        days_between_checkins: body.days_between_checkins,
+        checkin_frequency: body.checkin_frequency ?? 'daily',
+        days_between_checkins: body.days_between_checkins ?? 1,
+        checkin_value: BASE_CHECKIN_VALUE,
         target_completion_at: body.target_completion_at,
         completion_message: body.completion_message,
         is_public: body.is_public,
@@ -104,14 +107,6 @@ export async function createGoal(supabase: SupabaseClient,
     }
 
     return { data: { ...goal, total_milestones: milestoneCount }, error: null };
-}
-
-// Determines how many milestones a goal gets based on its duration.
-// Under 30 days → 1, 30–90 days → 3, 90+ days → 5.
-function getMilestoneCount(durationDays: number): number {
-    if (durationDays < 30) return 1;
-    if (durationDays <= 90) return 3;
-    return 5;
 }
 
 // Builds milestone row objects evenly spaced across the goal timeline.
@@ -200,27 +195,40 @@ export async function dropGoal(
 }
 
 export async function completeGoal(
-    supabase: SupabaseClient, 
-    goalId: string, 
+    supabase: SupabaseClient,
+    goalId: string,
     userId: string
 ) {
-    // TODO: Calculate 5× completion bonus
-    // 1. Fetch goal's score_checkin and score_milestone
-    // 2. completionBonus = 5 * (score_checkin + score_milestone)
-    // 3. Update goal status to 'completed', set completed_at
-    // 4. Add completionBonus to goal scores
-    // 5. Update profile's total_score with the bonus
-    // 6. Update profile's completed_goals_count (+1) and active_goals_count (-1)
+    // Fetch the goal to get scores for the completion bonus
+    const { data: goal, error: fetchError } = await supabase
+        .from('goals')
+        .select('id, user_id, score_checkin, score_milestone')
+        .eq('id', goalId)
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .single();
 
-    return await supabase
+    if (fetchError || !goal) {
+        return { data: null, error: { message: 'Goal not found or not active' } };
+    }
+
+    // Mark the goal as completed
+    const { data: updated, error: updateError } = await supabase
         .from('goals')
         .update({
             status: 'completed',
             completed_at: new Date().toISOString(),
         })
         .eq('id', goalId)
-        .eq('user_id', userId)
-        .eq('status', 'active')
         .select()
         .single();
+
+    if (updateError) {
+        return { data: null, error: updateError };
+    }
+
+    // Apply 5× completion bonus to profile score + update goal counts
+    const { completionBonus } = await scoreGoalCompletion(supabase, goal);
+
+    return { data: { ...updated, completion_bonus: completionBonus }, error: null };
 }
