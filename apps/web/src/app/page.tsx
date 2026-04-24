@@ -300,7 +300,7 @@ function GoalCard({ goal }: { goal: Goal }) {
     ? new Date(goal.target_completion_at).toLocaleDateString()
     : "—";
 
-  const score = goal.score_checkin ?? 0;
+  const score = (goal.score_checkin ?? 0) + (goal.score_milestone ?? 0);
   const streak = goal.current_streak ?? 0;
 
   return (
