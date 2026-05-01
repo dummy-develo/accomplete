@@ -58,6 +58,21 @@ export async function getPublicProfile(
         .single();
 }
 
+// Search profiles by username or display_name (case-insensitive partial match)
+export async function searchProfiles(
+    supabase: SupabaseClient,
+    query: string,
+    limit: number = 10
+) {
+    return await supabase
+        .from('profiles')
+        .select('username, display_name, avatar_url')
+        .eq('is_deleted', false)
+        .not('username', 'is', null)
+        .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
+        .limit(limit);
+}
+
 // Internal only — no API endpoint. Called by scoring/goal logic.
 export async function updateProfileStats(
     supabase: SupabaseClient,
