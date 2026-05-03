@@ -1,4 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
+import { resetStaleGlobalStreak } from "./streak";
 
 const ALLOWED_UPDATE_FIELDS = [
     'username',
@@ -10,12 +11,19 @@ export async function getOwnProfile(
     supabase: SupabaseClient,
     userId: string
 ) {
-    return await supabase
+    const result = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .eq('is_deleted', false)
         .single();
+
+    // Reset global streak if the user missed a day (write-on-read cleanup)
+    if (result.data) {
+        result.data = await resetStaleGlobalStreak(supabase, result.data);
+    }
+
+    return result;
 }
 
 export async function updateProfile(
@@ -50,12 +58,19 @@ export async function getPublicProfile(
     supabase: SupabaseClient,
     username: string
 ) {
-    return await supabase
+    const result = await supabase
         .from('profiles')
-        .select('username, display_name, avatar_url, total_score, global_streak, highest_streak, completed_goals_count, active_goals_count, dropped_goals_count, created_at')
+        .select('id, username, display_name, avatar_url, total_score, global_streak, highest_streak, completed_goals_count, active_goals_count, dropped_goals_count, created_at, last_checkin_date')
         .eq('username', username)
         .eq('is_deleted', false)
         .single();
+
+    // Reset global streak if the user missed a day (write-on-read cleanup)
+    if (result.data) {
+        result.data = await resetStaleGlobalStreak(supabase, result.data);
+    }
+
+    return result;
 }
 
 // Search profiles by username or display_name (case-insensitive partial match)

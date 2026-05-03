@@ -1,11 +1,12 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { BASE_CHECKIN_VALUE, COMPLETION_MULTIPLIER } from "../constants";
+import { calculateGoalStreak } from "./streak";
 
 // Scores a check-in if the user hasn't already scored one today for this goal.
 // Returns the points earned (either checkin_value or 0).
 export async function scoreCheckin(
     supabase: SupabaseClient,
-    goal: { id: string; user_id: string; checkin_value: number; score_checkin: number; last_checkin_date: string | null },
+    goal: { id: string; user_id: string; checkin_value: number; score_checkin: number; last_checkin_date: string | null; current_streak: number; best_streak: number },
     checkinId: string,
 ) {
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
@@ -18,18 +19,23 @@ export async function scoreCheckin(
     const points = goal.checkin_value ?? BASE_CHECKIN_VALUE;
     const newScoreCheckin = (goal.score_checkin ?? 0) + points;
 
+    // Calculate updated streak values
+    const streak = calculateGoalStreak(goal);
+
     // Update the check-in row with actual points
     await supabase
         .from('checkins')
         .update({ points_earned: points })
         .eq('id', checkinId);
 
-    // Update goal: bump score + set last_checkin_date
+    // Update goal: bump score + set last_checkin_date + update streaks
     await supabase
         .from('goals')
         .update({
             score_checkin: newScoreCheckin,
             last_checkin_date: today,
+            current_streak: streak.current_streak,
+            best_streak: streak.best_streak,
         })
         .eq('id', goal.id);
 

@@ -1,5 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { scoreCheckin, scoreMilestoneReach } from "./scoring";
+import { calculateGlobalStreak } from "./streak";
 
 export async function getCheckinsByGoal(
     supabase: SupabaseClient,
@@ -24,7 +25,7 @@ export async function createCheckin(
     // Fetch goal with all fields needed for scoring
     const { data: goal, error: goalError } = await supabase
         .from('goals')
-        .select('id, user_id, checkin_value, score_checkin, score_milestone, last_checkin_date, status, is_deleted')
+        .select('id, user_id, checkin_value, score_checkin, score_milestone, last_checkin_date, current_streak, best_streak, status, is_deleted')
         .eq('id', goalId)
         .eq('user_id', userId)
         .eq('status', 'active')
@@ -54,6 +55,23 @@ export async function createCheckin(
 
     // Score the check-in (10 pts if first of the day, 0 otherwise)
     const { pointsEarned } = await scoreCheckin(supabase, goal, checkin.id);
+
+    // Update global streak on the profile (at least one check-in today = streak continues)
+    if (pointsEarned > 0) {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('id, last_checkin_date, global_streak, highest_streak')
+            .eq('id', userId)
+            .single();
+
+        if (profile) {
+            const streakUpdate = calculateGlobalStreak(profile);
+            await supabase
+                .from('profiles')
+                .update(streakUpdate)
+                .eq('id', userId);
+        }
+    }
 
     // Check for milestones that have reached their target_date
     const { reachedMilestones } = await scoreMilestoneReach(supabase, goal);

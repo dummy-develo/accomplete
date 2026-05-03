@@ -107,7 +107,7 @@ export default function GoalDetail() {
             <CheckInForm
               goalId={goalId}
               benchmarkName={goal.benchmark_name}
-              onCheckinCreated={loadTimeline}
+              onCheckinCreated={() => { loadGoal(); loadTimeline(); }}
             />
           )}
           <TimelineSection

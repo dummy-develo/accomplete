@@ -1,6 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { createMilestones } from "./milestones";
 import { scoreGoalCompletion } from "./scoring";
+import { resetStaleStreaks } from "./streak";
 import { BASE_CHECKIN_VALUE, getMilestoneCount } from "../constants";
 
 const ALLOWED_UPDATE_FIELDS = [
@@ -38,22 +39,37 @@ export async function getGoalsByUser(
         query = query.eq('status', status);
     }
 
-    return await query;
+    const result = await query;
+
+    // Reset streaks for goals where the user missed a day (write-on-read cleanup)
+    if (result.data) {
+        result.data = await resetStaleStreaks(supabase, result.data);
+    }
+
+    return result;
 }
 
 
 
 export async function getGoalById(supabase: SupabaseClient
-    , goalId: string, 
+    , goalId: string,
     userId: string
 ) {
-    return await supabase
+    const result = await supabase
         .from('goals')
         .select('*')
         .eq('id', goalId)
         .eq('user_id', userId)
         .eq('is_deleted', false)
         .single();
+
+    // Reset streak if the user missed a day (write-on-read cleanup)
+    if (result.data) {
+        const [corrected] = await resetStaleStreaks(supabase, [result.data]);
+        result.data = corrected;
+    }
+
+    return result;
 }
 
 export async function createGoal(supabase: SupabaseClient,
