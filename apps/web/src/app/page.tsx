@@ -5,11 +5,12 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { SupabaseClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // Placeholder aliases — swap these for real types from packages/shared later.
 // Keeping them in one place so the eventual replacement is a single edit.
@@ -129,6 +130,8 @@ function TopNav({
       <h1 className="text-xl font-bold tracking-tight">accomplete</h1>
 
       <div className="flex items-center gap-4">
+        <SearchBar />
+
         {profile?.display_name && (
           <Link
             href={`/profile/${profile.username}`}
@@ -143,6 +146,105 @@ function TopNav({
         </Button>
       </div>
     </nav>
+  );
+}
+
+function SearchBar() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<any[]>([]);
+  const [open, setOpen] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Debounced fetch: fires 300ms after the user stops typing.
+  useEffect(() => {
+    if (query.length < 2) {
+      setResults([]);
+      setOpen(false);
+      setSearched(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/profile/search?q=${encodeURIComponent(query)}`
+        );
+        const json = await res.json();
+        setResults(json.profiles ?? []);
+        setSearched(true);
+        setOpen(true);
+      } catch {
+        setResults([]);
+        setSearched(true);
+        setOpen(true);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // Close dropdown on click outside.
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  function clear() {
+    setQuery("");
+    setResults([]);
+    setOpen(false);
+    setSearched(false);
+  }
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <Input
+        type="text"
+        placeholder="search users..."
+        maxLength={50}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") clear();
+        }}
+        className="w-40 md:w-52"
+      />
+
+      {open && searched && (
+        <div className="absolute top-full mt-1 w-full bg-background border rounded shadow-md z-50 max-h-60 overflow-y-auto">
+          {results.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-muted-foreground">
+              no users found
+            </p>
+          ) : (
+            results.map((p) => (
+              <Link
+                key={p.username}
+                href={`/profile/${p.username}`}
+                onClick={clear}
+                className="flex flex-col px-3 py-2 hover:bg-muted transition-colors"
+              >
+                <span className="text-xs font-medium">{p.username}</span>
+                {p.display_name && (
+                  <span className="text-[11px] text-muted-foreground">
+                    {p.display_name}
+                  </span>
+                )}
+              </Link>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

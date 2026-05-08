@@ -5,8 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
     const query = request.nextUrl.searchParams.get('q')?.trim();
 
-    if (!query || query.length < 2) {
-        return Response.json({ error: 'Query must be at least 2 characters' }, { status: 400 });
+    if (!query || query.length < 2 || query.length > 50) {
+        return Response.json({ error: 'Query must be 2–50 characters' }, { status: 400 });
     }
 
     console.log('[log] GET profile search request for q=' + query);
