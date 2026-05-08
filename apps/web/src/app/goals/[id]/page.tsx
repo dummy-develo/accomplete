@@ -5,9 +5,26 @@
 // drop/complete actions come in later layers.
 "use client";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 type Goal = any;
@@ -100,7 +117,7 @@ export default function GoalDetail() {
 
       {!loading && !error && goal && (
         <>
-          <GoalHeader goal={goal} />
+          <GoalHeader goal={goal} goalId={goalId} loadGoal={loadGoal} />
           <StatsBar goal={goal} />
           <MetaInfo goal={goal} />
           {goal.status === "active" && (
@@ -154,7 +171,15 @@ function NotFound({ message }: { message: string }) {
   );
 }
 
-function GoalHeader({ goal }: { goal: Goal }) {
+function GoalHeader({
+  goal,
+  goalId,
+  loadGoal,
+}: {
+  goal: Goal;
+  goalId: string;
+  loadGoal: () => Promise<void>;
+}) {
   return (
     <section className="mt-8">
       <div className="flex items-start justify-between gap-3">
@@ -175,9 +200,142 @@ function GoalHeader({ goal }: { goal: Goal }) {
             </p>
           )}
         </div>
-        <StatusBadge status={goal.status} />
+        <div className="flex items-center gap-2 shrink-0">
+          <StatusBadge status={goal.status} />
+          {goal.status === "active" && (
+            <GoalActions goalId={goalId} goal={goal} loadGoal={loadGoal} />
+          )}
+        </div>
       </div>
     </section>
+  );
+}
+
+// Goal actions dropdown — complete, drop, or navigate to edit pages.
+// Only rendered for active goals. Each destructive action opens a
+// confirmation dialog before hitting the API.
+function GoalActions({
+  goalId,
+  goal,
+  loadGoal,
+}: {
+  goalId: string;
+  goal: Goal;
+  loadGoal: () => Promise<void>;
+}) {
+  const router = useRouter();
+  const [completeOpen, setCompleteOpen] = useState(false);
+  const [dropOpen, setDropOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleComplete() {
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/goals/${goalId}/complete`, {
+        method: "POST",
+      });
+      if (res.ok) await loadGoal();
+    } finally {
+      setSubmitting(false);
+      setCompleteOpen(false);
+    }
+  }
+
+  async function handleDrop() {
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/goals/${goalId}/drop`, {
+        method: "POST",
+      });
+      if (res.ok) await loadGoal();
+    } finally {
+      setSubmitting(false);
+      setDropOpen(false);
+    }
+  }
+
+  // Pre-compute the completion bonus for the dialog description
+  const totalGoalScore =
+    (goal.score_checkin ?? 0) + (goal.score_milestone ?? 0);
+  const completionBonus = 5 * totalGoalScore;
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="flex items-center justify-center h-7 w-7 rounded-md border text-muted-foreground hover:text-foreground hover:border-foreground transition-colors"
+            aria-label="Goal actions"
+          >
+            ⋯
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => router.push(`/goals/${goalId}/edit`)}>
+            edit goal
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => router.push(`/goals/${goalId}/edit?tab=privacy`)}
+          >
+            edit privacy
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setCompleteOpen(true)}>
+            mark as complete
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-red-500 focus:text-red-500"
+            onClick={() => setDropOpen(true)}
+          >
+            drop goal
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Complete goal confirmation */}
+      <AlertDialog open={completeOpen} onOpenChange={setCompleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>complete this goal?</AlertDialogTitle>
+            <AlertDialogDescription>
+              this is irreversible. you&apos;ll earn a 5× completion bonus of{" "}
+              <strong>{completionBonus.toLocaleString()} points</strong> on top
+              of your current score. no more check-ins after this.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleComplete} disabled={submitting}>
+              {submitting ? "completing..." : "complete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Drop goal confirmation */}
+      <AlertDialog open={dropOpen} onOpenChange={setDropOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>drop this goal?</AlertDialogTitle>
+            <AlertDialogDescription>
+              this is irreversible. your streak will reset and you won&apos;t
+              earn the completion bonus. points already earned are kept.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDrop}
+              disabled={submitting}
+              className="bg-red-500 hover:bg-red-600 text-white"
+            >
+              {submitting ? "dropping..." : "drop"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
@@ -200,8 +358,11 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function StatsBar({ goal }: { goal: Goal }) {
-  // Total goal score is check-in points + milestone bonuses.
-  const score = (goal.score_checkin ?? 0) + (goal.score_milestone ?? 0);
+  // Total goal score is check-in points + milestone bonuses + completion bonus.
+  const score =
+    (goal.score_checkin ?? 0) +
+    (goal.score_milestone ?? 0) +
+    (goal.score_completion ?? 0);
   const currentStreak = goal.current_streak ?? 0;
   const bestStreak = goal.best_streak ?? 0;
 

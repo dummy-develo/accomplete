@@ -139,6 +139,12 @@ export async function scoreGoalCompletion(
     const bonus = COMPLETION_MULTIPLIER * goalScore;
 
     if (bonus > 0) {
+        // Store completion bonus on the goal itself
+        await supabase
+            .from('goals')
+            .update({ score_completion: bonus })
+            .eq('id', goal.id);
+
         // Update profile total score with the bonus
         await supabase
             .from('profiles')
