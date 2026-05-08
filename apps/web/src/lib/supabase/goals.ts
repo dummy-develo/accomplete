@@ -89,6 +89,12 @@ export async function createGoal(supabase: SupabaseClient,
         target_completion_at: body.target_completion_at,
         completion_message: body.completion_message,
         is_public: body.is_public,
+        is_goal_name_public: body.is_goal_name_public ?? true,
+        is_username_public: body.is_username_public ?? true,
+        is_description_public: body.is_description_public ?? true,
+        is_goal_type_public: body.is_goal_type_public ?? true,
+        are_checkins_public: body.are_checkins_public ?? true,
+        is_benchmark_name_public: body.is_benchmark_name_public ?? true,
     };
 
     // Insert the goal row
