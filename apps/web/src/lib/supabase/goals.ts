@@ -122,6 +122,21 @@ export async function createGoal(supabase: SupabaseClient,
             .eq('id', goal.id);
     }
 
+    // Increment active_goals_count on the profile
+    await supabase
+        .from('profiles')
+        .select('active_goals_count')
+        .eq('id', userId)
+        .single()
+        .then(({ data }) => {
+            return supabase
+                .from('profiles')
+                .update({
+                    active_goals_count: (data?.active_goals_count ?? 0) + 1,
+                })
+                .eq('id', userId);
+        });
+
     return { data: { ...goal, total_milestones: milestoneCount }, error: null };
 }
 
@@ -166,6 +181,21 @@ function generateMilestoneRows(
     return rows;
 }
 
+// Fetches public, non-deleted goals for any user (used on profile pages).
+// No streak reset here — this is a read-only view for other users.
+export async function getPublicGoalsByUserId(
+    supabase: SupabaseClient,
+    userId: string
+) {
+    return await supabase
+        .from('goals')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_public', true)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false });
+}
+
 export async function updateGoal(
     supabase: SupabaseClient, 
     goalId: string, 
@@ -193,11 +223,11 @@ export async function updateGoal(
 }
 
 export async function dropGoal(
-    supabase: SupabaseClient, 
-    goalId: string, 
+    supabase: SupabaseClient,
+    goalId: string,
     userId: string
 ) {
-    return await supabase
+    const result = await supabase
         .from('goals')
         .update({
             status: 'dropped',
@@ -208,6 +238,26 @@ export async function dropGoal(
         .eq('status', 'active')
         .select()
         .single();
+
+    // Update profile goal counts: active -1, dropped +1
+    if (result.data) {
+        await supabase
+            .from('profiles')
+            .select('active_goals_count, dropped_goals_count')
+            .eq('id', userId)
+            .single()
+            .then(({ data }) => {
+                return supabase
+                    .from('profiles')
+                    .update({
+                        active_goals_count: Math.max((data?.active_goals_count ?? 0) - 1, 0),
+                        dropped_goals_count: (data?.dropped_goals_count ?? 0) + 1,
+                    })
+                    .eq('id', userId);
+            });
+    }
+
+    return result;
 }
 
 export async function completeGoal(

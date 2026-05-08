@@ -130,9 +130,12 @@ function TopNav({
 
       <div className="flex items-center gap-4">
         {profile?.display_name && (
-          <span className="text-xs text-muted-foreground">
+          <Link
+            href={`/profile/${profile.username}`}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
             hi, {profile.display_name}
-          </span>
+          </Link>
         )}
 
         <Button variant="outline" size="sm" onClick={handleSignOut}>
