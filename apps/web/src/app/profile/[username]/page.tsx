@@ -2,6 +2,7 @@
 // Ownership is detected by comparing the profile's ID with the logged-in user's ID.
 "use client";
 
+import { House } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
@@ -99,9 +100,9 @@ function BackLink() {
     <nav className="pb-4 border-b">
       <Link
         href="/"
-        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
-        &larr; home
+        <House size={16} /> home
       </Link>
     </nav>
   );

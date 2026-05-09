@@ -5,6 +5,7 @@
 // drop/complete actions come in later layers.
 "use client";
 
+import { House } from "@phosphor-icons/react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -144,9 +145,9 @@ function TopBar() {
     <nav className="flex items-center pb-4 border-b">
       <Link
         href="/"
-        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
-        ← back to home
+        <House size={16} /> home
       </Link>
     </nav>
   );
@@ -163,8 +164,8 @@ function NotFound({ message }: { message: string }) {
         <p className="text-xs text-muted-foreground">
           the goal you're looking for doesn't exist or isn't accessible.
         </p>
-        <Link href="/" className="mt-2 text-xs underline underline-offset-4">
-          back to home
+        <Link href="/" className="mt-2 flex items-center gap-1.5 text-xs underline underline-offset-4">
+          <House size={14} /> home
         </Link>
       </CardContent>
     </Card>

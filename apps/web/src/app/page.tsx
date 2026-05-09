@@ -127,7 +127,7 @@ function TopNav({
 
   return (
     <nav className="flex items-center justify-between pb-4 border-b">
-      <h1 className="text-xl font-bold tracking-tight">accomplete</h1>
+      <h1 className="text-2xl font-bold tracking-tight">ACCOMPLETE</h1>
 
       <div className="flex items-center gap-4">
         <SearchBar />
