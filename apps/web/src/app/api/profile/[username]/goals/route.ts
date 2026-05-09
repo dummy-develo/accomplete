@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getPublicGoalsByUserId } from "@/lib/supabase/goals";
+import { getPublicGoalsByUserId, stripPrivateFields } from "@/lib/supabase/goals";
 
 // Returns public goals for a user, looked up by username.
-// No auth required — these are public goals.
+// Owners see full data; non-owners get private fields stripped.
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ username: string }> }
@@ -24,11 +24,23 @@ export async function GET(
         return Response.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const { data: goals, error } = await getPublicGoalsByUserId(supabase, profile.id);
+    // Check if the requesting user is the profile owner
+    const { data: { user } } = await supabase.auth.getUser();
+    const isOwner = user?.id === profile.id;
+
+    const { data: goals, error } = await getPublicGoalsByUserId(
+        supabase,
+        profile.id,
+        { skipUsernameFilter: isOwner }
+    );
 
     if (error) {
         return Response.json({ error: error.message }, { status: 500 });
     }
 
-    return Response.json({ goals: goals ?? [] });
+    const result = isOwner
+        ? (goals ?? [])
+        : (goals ?? []).map(stripPrivateFields);
+
+    return Response.json({ goals: result });
 }

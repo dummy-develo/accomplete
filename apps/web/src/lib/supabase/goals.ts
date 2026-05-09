@@ -187,19 +187,44 @@ function generateMilestoneRows(
     return rows;
 }
 
+// Nulls out fields the goal owner marked as private.
+// Used when returning public goals to non-owners so raw data doesn't leak.
+export function stripPrivateFields(goal: Record<string, any>) {
+    const stripped = { ...goal };
+    if (!goal.is_goal_name_public)      stripped.goal_name = null;
+    if (!goal.is_description_public)    stripped.goal_description = null;
+    if (!goal.is_goal_type_public)      stripped.goal_type = null;
+    if (!goal.is_benchmark_name_public) {
+        stripped.benchmark_name = null;
+        stripped.benchmark_target_value = null;
+    }
+    // completion_message is always private to the owner
+    stripped.completion_message = null;
+    return stripped;
+}
+
 // Fetches public, non-deleted goals for any user (used on profile pages).
 // No streak reset here — this is a read-only view for other users.
+// By default, excludes goals where is_username_public is false (showing them
+// on a profile page would reveal the owner). Pass skipUsernameFilter: true
+// for the owner viewing their own profile.
 export async function getPublicGoalsByUserId(
     supabase: SupabaseClient,
-    userId: string
+    userId: string,
+    options?: { skipUsernameFilter?: boolean }
 ) {
-    return await supabase
+    let query = supabase
         .from('goals')
         .select('*')
         .eq('user_id', userId)
         .eq('is_public', true)
-        .eq('is_deleted', false)
-        .order('created_at', { ascending: false });
+        .eq('is_deleted', false);
+
+    if (!options?.skipUsernameFilter) {
+        query = query.eq('is_username_public', true);
+    }
+
+    return await query.order('created_at', { ascending: false });
 }
 
 export async function updateGoal(
