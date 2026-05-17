@@ -231,26 +231,59 @@ export async function getPublicGoalsByUserId(
     return await query.order('created_at', { ascending: false });
 }
 
-// Public goal feed, newest first, paginated. Always filters out goals whose
-// owner hid their username (showing them in a public feed would reveal the
-// owner — same rule as getPublicGoalsByUserId). The viewer's block set is
-// passed as excludeUserIds; the following feed additionally restricts to a
-// set of followed user ids.
+// Whitelisted feed sort keys → the actual column ordered (always desc).
+// Exported so the route validates against the same source of truth.
+export const FEED_SORT_COLUMNS = {
+    newest: 'created_at',
+    current_streak: 'current_streak',
+    best_streak: 'best_streak',
+    recently_active: 'last_checkin_date',
+    score: 'score_total',
+} as const;
+
+export type FeedSort = keyof typeof FEED_SORT_COLUMNS;
+
+// 'all' = no status filter. The others map to goals.status directly.
+export const FEED_STATUSES = ['active', 'completed', 'dropped', 'all'] as const;
+
+export type FeedStatus = (typeof FEED_STATUSES)[number];
+
+// Public goal feed, paginated. Always filters out goals whose owner hid
+// their username (showing them in a public feed would reveal the owner —
+// same rule as getPublicGoalsByUserId). The viewer's block set is passed
+// as excludeUserIds; the following feed additionally restricts to a set
+// of followed user ids.
+//
+// sort/status default to newest/all so callers that omit them (the
+// following feed) behave exactly as before. Note: current_streak can be
+// transiently stale — streaks reset lazily on individual goal/profile
+// fetch, not in this bulk read — so that sort may rank a stale-high
+// streak too high until its goal is next visited (accepted for MVP).
 export async function getPublicGoalsFeed(
     supabase: SupabaseClient,
     options: {
         excludeUserIds?: string[];
         restrictToUserIds?: string[];
+        sort?: FeedSort;
+        status?: FeedStatus;
         limit: number;
         offset: number;
     }
 ) {
+    const sort = options.sort ?? 'newest';
+    const status = options.status ?? 'all';
+    const sortColumn = FEED_SORT_COLUMNS[sort];
+
     let query = supabase
         .from('goals')
         .select('*')
         .eq('is_public', true)
         .eq('is_deleted', false)
         .eq('is_username_public', true);
+
+    if (status !== 'all') {
+        query = query.eq('status', status);
+    }
 
     if (options.restrictToUserIds) {
         query = query.in('user_id', options.restrictToUserIds);
@@ -261,9 +294,16 @@ export async function getPublicGoalsFeed(
         query = query.not('user_id', 'in', `(${options.excludeUserIds.join(',')})`);
     }
 
-    return await query
-        .order('created_at', { ascending: false })
-        .range(options.offset, options.offset + options.limit - 1);
+    // Primary sort (desc, nulls last so no-check-in goals sink on
+    // "recently active"), then a deterministic created_at/id tie-break so
+    // offset pagination never reshuffles rows that share a sort value.
+    query = query.order(sortColumn, { ascending: false, nullsFirst: false });
+    if (sortColumn !== 'created_at') {
+        query = query.order('created_at', { ascending: false });
+    }
+    query = query.order('id', { ascending: false });
+
+    return await query.range(options.offset, options.offset + options.limit - 1);
 }
 
 export async function updateGoal(
