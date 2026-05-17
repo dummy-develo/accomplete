@@ -73,6 +73,38 @@ export async function getPublicProfile(
     return result;
 }
 
+// Lightweight username → id lookup. Unlike getPublicProfile this returns
+// only the id and skips the streak write-on-read, so follow/block/feed
+// routes can resolve a target without touching the target's profile.
+export async function getProfileIdByUsername(
+    supabase: SupabaseClient,
+    username: string
+) {
+    return await supabase
+        .from('profiles')
+        .select('id')
+        .eq('username', username)
+        .eq('is_deleted', false)
+        .single();
+}
+
+// Batch fetch of public profile fields by id. Used to attach author info
+// to feed goals in a single query (the codebase joins in app code rather
+// than via embedded relational selects).
+export async function getProfilesByIds(
+    supabase: SupabaseClient,
+    ids: string[]
+) {
+    if (ids.length === 0) {
+        return { data: [], error: null };
+    }
+    return await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url')
+        .in('id', ids)
+        .eq('is_deleted', false);
+}
+
 // Search profiles by username or display_name (case-insensitive partial match)
 export async function searchProfiles(
     supabase: SupabaseClient,

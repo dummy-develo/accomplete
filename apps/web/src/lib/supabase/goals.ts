@@ -231,6 +231,41 @@ export async function getPublicGoalsByUserId(
     return await query.order('created_at', { ascending: false });
 }
 
+// Public goal feed, newest first, paginated. Always filters out goals whose
+// owner hid their username (showing them in a public feed would reveal the
+// owner — same rule as getPublicGoalsByUserId). The viewer's block set is
+// passed as excludeUserIds; the following feed additionally restricts to a
+// set of followed user ids.
+export async function getPublicGoalsFeed(
+    supabase: SupabaseClient,
+    options: {
+        excludeUserIds?: string[];
+        restrictToUserIds?: string[];
+        limit: number;
+        offset: number;
+    }
+) {
+    let query = supabase
+        .from('goals')
+        .select('*')
+        .eq('is_public', true)
+        .eq('is_deleted', false)
+        .eq('is_username_public', true);
+
+    if (options.restrictToUserIds) {
+        query = query.in('user_id', options.restrictToUserIds);
+    }
+
+    if (options.excludeUserIds && options.excludeUserIds.length > 0) {
+        // PostgREST `not in` list syntax: (uuid1,uuid2,...)
+        query = query.not('user_id', 'in', `(${options.excludeUserIds.join(',')})`);
+    }
+
+    return await query
+        .order('created_at', { ascending: false })
+        .range(options.offset, options.offset + options.limit - 1);
+}
+
 export async function updateGoal(
     supabase: SupabaseClient, 
     goalId: string, 
