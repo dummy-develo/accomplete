@@ -18,6 +18,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [isOwner, setIsOwner] = useState(false);
+  const [relation, setRelation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,10 +28,11 @@ export default function ProfilePage() {
 
     try {
       // Fetch the viewed profile, their public goals, and the logged-in user in parallel
-      const [profileRes, goalsRes, meRes] = await Promise.all([
+      const [profileRes, goalsRes, meRes, relationRes] = await Promise.all([
         fetch(`/api/profile/${username}`),
         fetch(`/api/profile/${username}/goals`),
         fetch("/api/profile/me"),
+        fetch(`/api/profile/${username}/relation`),
       ]);
 
       if (!profileRes.ok) {
@@ -41,10 +43,12 @@ export default function ProfilePage() {
       const profileJson = await profileRes.json();
       const goalsJson = await goalsRes.json();
       const meJson = await meRes.json();
+      const relationJson = await relationRes.json();
 
       setProfile(profileJson.profile);
       setGoals(goalsJson.goals ?? []);
       setIsOwner(meJson.profile?.id === profileJson.profile?.id);
+      setRelation(relationJson.state ?? null);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -88,7 +92,13 @@ export default function ProfilePage() {
   return (
     <main className="w-full max-w-4xl mx-auto px-4 py-6">
       <BackLink />
-      <IdentitySection profile={profile} isOwner={isOwner} />
+      <IdentitySection
+        profile={profile}
+        isOwner={isOwner}
+        username={username}
+        relation={relation}
+        onRelationChange={setRelation}
+      />
       <StatsGrid profile={profile} />
       <PublicGoals goals={goals} isOwner={isOwner} />
     </main>
@@ -111,9 +121,15 @@ function BackLink() {
 function IdentitySection({
   profile,
   isOwner,
+  username,
+  relation,
+  onRelationChange,
 }: {
   profile: Profile;
   isOwner: boolean;
+  username: string;
+  relation: any;
+  onRelationChange: (state: any) => void;
 }) {
   const memberSince = profile.created_at
     ? new Date(profile.created_at).toLocaleDateString("en-US", {
@@ -144,11 +160,64 @@ function IdentitySection({
           <Link href="/profile/edit">edit profile</Link>
         </Button>
       ) : (
-        <Button variant="outline" size="sm" disabled>
-          follow
-        </Button>
+        <RelationActions
+          username={username}
+          relation={relation}
+          onChange={onRelationChange}
+        />
       )}
     </section>
+  );
+}
+
+// Follow/unfollow + block/unblock. No client-side logic — each button
+// just hits the endpoint and adopts whatever relation state it returns.
+function RelationActions({
+  username,
+  relation,
+  onChange,
+}: {
+  username: string;
+  relation: any;
+  onChange: (state: any) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  async function act(path: string, method: string) {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/profile/${username}/${path}`, { method });
+      const json = await res.json();
+      if (res.ok && json.state) onChange(json.state);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const isFollowing = relation?.isFollowing ?? false;
+  const isBlocked = relation?.isBlockedByMe ?? false;
+
+  return (
+    <div className="flex gap-2 shrink-0">
+      <Button
+        variant={isFollowing ? "outline" : "default"}
+        size="sm"
+        disabled={busy}
+        onClick={() =>
+          act("follow", isFollowing ? "DELETE" : "POST")
+        }
+      >
+        {isFollowing ? "unfollow" : "follow"}
+      </Button>
+      <Button
+        variant={isBlocked ? "destructive" : "outline"}
+        size="sm"
+        disabled={busy}
+        onClick={() => act("block", isBlocked ? "DELETE" : "POST")}
+      >
+        {isBlocked ? "unblock" : "block"}
+      </Button>
+    </div>
   );
 }
 
