@@ -89,6 +89,14 @@ export default function ProfilePage() {
     );
   }
 
+  // Block visibility:
+  // - iBlockedThem: you blocked them — hide everything but identity + unblock
+  // - theyBlockedMe: they blocked you — zeroed stats, no goals, no actions
+  // Your own block takes precedence so you can always unblock.
+  const iBlockedThem = !isOwner && (relation?.isBlockedByMe ?? false);
+  const theyBlockedMe =
+    !isOwner && !iBlockedThem && (relation?.isBlockedByThem ?? false);
+
   return (
     <main className="w-full max-w-4xl mx-auto px-4 py-6">
       <BackLink />
@@ -99,8 +107,22 @@ export default function ProfilePage() {
         relation={relation}
         onRelationChange={setRelation}
       />
-      <StatsGrid profile={profile} />
-      <PublicGoals goals={goals} isOwner={isOwner} />
+
+      {iBlockedThem ? (
+        <Card className="mt-8">
+          <CardContent className="py-10 text-center">
+            <p className="text-sm text-muted-foreground">
+              you blocked @{profile.username}. their stats and goals are
+              hidden. unblock to see this profile again.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <StatsGrid profile={profile} zeroed={theyBlockedMe} />
+          <PublicGoals goals={goals} isOwner={isOwner} />
+        </>
+      )}
     </main>
   );
 }
@@ -195,7 +217,29 @@ function RelationActions({
   }
 
   const isFollowing = relation?.isFollowing ?? false;
-  const isBlocked = relation?.isBlockedByMe ?? false;
+  const iBlockedThem = relation?.isBlockedByMe ?? false;
+  const theyBlockedMe = relation?.isBlockedByThem ?? false;
+
+  // You blocked them — only the unblock control.
+  if (iBlockedThem) {
+    return (
+      <div className="shrink-0">
+        <Button
+          variant="destructive"
+          size="sm"
+          disabled={busy}
+          onClick={() => act("block", "DELETE")}
+        >
+          unblock
+        </Button>
+      </div>
+    );
+  }
+
+  // They blocked you — no actions at all (you can't tell you're blocked).
+  if (theyBlockedMe) {
+    return null;
+  }
 
   return (
     <div className="flex gap-2 shrink-0">
@@ -210,29 +254,35 @@ function RelationActions({
         {isFollowing ? "unfollow" : "follow"}
       </Button>
       <Button
-        variant={isBlocked ? "destructive" : "outline"}
+        variant="outline"
         size="sm"
         disabled={busy}
-        onClick={() => act("block", isBlocked ? "DELETE" : "POST")}
+        onClick={() => act("block", "POST")}
       >
-        {isBlocked ? "unblock" : "block"}
+        block
       </Button>
     </div>
   );
 }
 
-function StatsGrid({ profile }: { profile: Profile }) {
+// zeroed: render all stats as 0 (used when the viewer is blocked by this
+// user — they should not see real numbers).
+function StatsGrid({
+  profile,
+  zeroed,
+}: {
+  profile: Profile;
+  zeroed?: boolean;
+}) {
+  const v = (n: number) => (zeroed ? 0 : n);
   return (
     <div className="grid grid-cols-3 gap-3 mt-8">
-      <StatCell label="score" value={profile.total_score ?? 0} />
-      <StatCell label="global streak" value={profile.global_streak ?? 0} />
-      <StatCell label="best streak" value={profile.highest_streak ?? 0} />
-      <StatCell label="active goals" value={profile.active_goals_count ?? 0} />
-      <StatCell
-        label="completed"
-        value={profile.completed_goals_count ?? 0}
-      />
-      <StatCell label="dropped" value={profile.dropped_goals_count ?? 0} />
+      <StatCell label="score" value={v(profile.total_score ?? 0)} />
+      <StatCell label="global streak" value={v(profile.global_streak ?? 0)} />
+      <StatCell label="best streak" value={v(profile.highest_streak ?? 0)} />
+      <StatCell label="active goals" value={v(profile.active_goals_count ?? 0)} />
+      <StatCell label="completed" value={v(profile.completed_goals_count ?? 0)} />
+      <StatCell label="dropped" value={v(profile.dropped_goals_count ?? 0)} />
     </div>
   );
 }
