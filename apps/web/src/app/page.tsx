@@ -132,6 +132,13 @@ function TopNav({
       <div className="flex items-center gap-4">
         <SearchBar />
 
+        <Link
+          href="/feed"
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          feed
+        </Link>
+
         {profile?.display_name && (
           <Link
             href={`/profile/${profile.username}`}
