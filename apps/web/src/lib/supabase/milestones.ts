@@ -25,6 +25,25 @@ export async function createMilestones(
         .select();
 }
 
+// Hard-deletes unreached milestones by ID. Safe because unreached
+// milestones have no earned points — nothing to preserve.
+export async function deleteUnreachedMilestones(
+    supabase: SupabaseClient,
+    goalId: string,
+    userId: string,
+    milestoneIds: string[]
+) {
+    if (milestoneIds.length === 0) return { error: null };
+
+    return await supabase
+        .from('milestones')
+        .delete()
+        .in('id', milestoneIds)
+        .eq('goal_id', goalId)
+        .eq('user_id', userId)
+        .is('reached_at', null);
+}
+
 export async function updateMilestone(
     supabase: SupabaseClient,
     milestoneId: string,

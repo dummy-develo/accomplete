@@ -1,5 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { createMilestones } from "./milestones";
+import { createMilestones, deleteUnreachedMilestones, getMilestonesByGoal } from "./milestones";
 import { scoreGoalCompletion } from "./scoring";
 import { resetStaleStreaks } from "./streak";
 import { BASE_CHECKIN_VALUE, getMilestoneCount } from "../constants";
@@ -150,11 +150,15 @@ export async function createGoal(supabase: SupabaseClient,
 // Each milestone lands at i/(N+1) of the way through, so the last one
 // is always before the goal's end date, never coinciding with it.
 // All target_dates are set to midnight UTC for clean display.
-function generateMilestoneRows(
+// scoreSnapshot defaults to 0 (new goal). When adding milestones to an
+// existing goal (tier change), pass the goal's current score_checkin so
+// new milestones don't award retroactive bonus points.
+export function generateMilestoneRows(
     goalId: string,
     userId: string,
     targetCompletionAt: string,
     createdAt: string,
+    scoreSnapshot: number = 0,
 ) {
     const start = new Date(createdAt);
     const end = new Date(targetCompletionAt);
@@ -179,7 +183,7 @@ function generateMilestoneRows(
             user_id: userId,
             order_index: i,
             target_date: targetDate.toISOString(),
-            checkin_score_at_creation: 0,
+            checkin_score_at_creation: scoreSnapshot,
             points_earned: 0,
         });
     }
@@ -328,4 +332,83 @@ export async function completeGoal(
     const { completionBonus } = await scoreGoalCompletion(supabase, goal);
 
     return { data: { ...updated, completion_bonus: completionBonus }, error: null };
+}
+
+// Reconciles milestones when a goal's target_completion_at changes.
+// Adds new milestones if the tier increased, removes unreached ones if
+// it decreased, and cleans up any milestones whose target_date is now
+// past the new end date. Returns the new total_milestones count.
+export async function reconcileMilestones(
+    supabase: SupabaseClient,
+    goal: Record<string, any>,
+    newTargetDate: string,
+) {
+    const oldEnd = new Date(goal.target_completion_at);
+    const newEnd = new Date(newTargetDate);
+    const start = new Date(goal.created_at);
+
+    const oldDurationDays = (oldEnd.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+    const newDurationDays = (newEnd.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+
+    const oldTierCount = getMilestoneCount(oldDurationDays);
+    const newTierCount = getMilestoneCount(newDurationDays);
+
+    // Fetch existing milestones
+    const { data: milestones } = await getMilestonesByGoal(supabase, goal.id, goal.user_id);
+    if (!milestones) return goal.total_milestones ?? oldTierCount;
+
+    const reached = milestones.filter((m: any) => m.reached_at !== null);
+    const unreached = milestones.filter((m: any) => m.reached_at === null);
+
+    if (newTierCount > oldTierCount) {
+        // Tier increased — add new milestones. Generate a full set for the
+        // new timeline, then only insert the extras (beyond what already exists).
+        const needed = newTierCount - milestones.length;
+        if (needed > 0) {
+            const allRows = generateMilestoneRows(
+                goal.id, goal.user_id, newTargetDate, goal.created_at, goal.score_checkin ?? 0
+            );
+            // Take the last `needed` rows and assign order_index continuing from existing
+            const startIndex = milestones.length + 1;
+            const newRows = allRows.slice(allRows.length - needed).map((row, i) => ({
+                ...row,
+                order_index: startIndex + i,
+            }));
+            if (newRows.length > 0) {
+                await createMilestones(supabase, newRows);
+            }
+        }
+    } else if (newTierCount < oldTierCount) {
+        // Tier decreased — remove unreached milestones down to
+        // max(newTierCount, reachedCount) so we never delete reached ones.
+        const keepCount = Math.max(newTierCount, reached.length);
+        const toDelete = milestones.length - keepCount;
+        if (toDelete > 0) {
+            // Delete from the end (highest order_index first)
+            const idsToDelete = unreached
+                .sort((a: any, b: any) => b.order_index - a.order_index)
+                .slice(0, toDelete)
+                .map((m: any) => m.id);
+            await deleteUnreachedMilestones(supabase, goal.id, goal.user_id, idsToDelete);
+        }
+    }
+
+    // Remove any unreached milestones whose target_date is after the new end date
+    const orphaned = unreached.filter((m: any) => new Date(m.target_date) > newEnd);
+    if (orphaned.length > 0) {
+        const orphanIds = orphaned.map((m: any) => m.id);
+        await deleteUnreachedMilestones(supabase, goal.id, goal.user_id, orphanIds);
+    }
+
+    // Calculate final count by re-fetching (simplest way to get accurate number)
+    const { data: finalMilestones } = await getMilestonesByGoal(supabase, goal.id, goal.user_id);
+    const finalCount = finalMilestones?.length ?? 0;
+
+    // Update the goal's total_milestones
+    await supabase
+        .from('goals')
+        .update({ total_milestones: finalCount })
+        .eq('id', goal.id);
+
+    return finalCount;
 }

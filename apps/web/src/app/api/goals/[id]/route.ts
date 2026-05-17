@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { getGoalById, updateGoal } from "@/lib/supabase/goals";
+import { getGoalById, updateGoal, reconcileMilestones } from "@/lib/supabase/goals";
 import { verifyUser } from "@/lib/supabase/auth";
 
 export async function GET(
@@ -49,12 +49,24 @@ export async function PATCH(
     const {supabase, userId} = auth;
 
 
+    // If target_completion_at is changing, fetch the goal before updating
+    // so we can reconcile milestones based on the old vs new duration.
+    let goalBeforeUpdate: Record<string, any> | null = null;
+    if ('target_completion_at' in body) {
+        const { data: existing } = await getGoalById(supabase, id, userId);
+        goalBeforeUpdate = existing;
+    }
+
     const {data : goal , error } = await updateGoal(supabase,id, userId, body);
 
     if(error){
         return Response.json({ error }, { status: 503 });
     }
 
+    // Reconcile milestones when the target date changed
+    if (goalBeforeUpdate && body.target_completion_at) {
+        await reconcileMilestones(supabase, goalBeforeUpdate, body.target_completion_at as string);
+    }
 
     return Response.json({ goal });
 
