@@ -442,10 +442,6 @@ function GoalCard({ goal }: { goal: Goal }) {
                 </span>
               </span>
               <span>
-                freq:{" "}
-                <span className="text-foreground">{goal.checkin_frequency}</span>
-              </span>
-              <span>
                 deadline: <span className="text-foreground">{deadline}</span>
               </span>
             </div>

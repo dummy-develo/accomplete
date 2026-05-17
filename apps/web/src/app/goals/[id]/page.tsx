@@ -406,9 +406,8 @@ function MetaInfo({ goal }: { goal: Goal }) {
         details
       </h2>
       <Card>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-4">
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
           <MetaItem label="target" value={target} />
-          <MetaItem label="frequency" value={goal.checkin_frequency ?? "—"} />
           <MetaItem label="deadline" value={deadline} />
         </CardContent>
       </Card>
