@@ -1,7 +1,8 @@
 // Feed page — Global / Following tabs of public goal cards.
-// Goals belong to other people, so cards are not clickable (others'
-// goal detail isn't accessible); the author header links to their
-// profile instead. Private fields arrive already stripped by the API.
+// The card body links to the read-only public goal view; the author
+// header is a separate link to their profile (siblings, since HTML
+// disallows nested anchors). Private fields arrive already stripped
+// by the API.
 "use client";
 
 import { House } from "@phosphor-icons/react";
@@ -240,6 +241,8 @@ function EmptyState({ tab }: { tab: Tab }) {
 
 // Author header + goal info. Private fields are already nulled by the
 // API (stripPrivateFields), so fall back to placeholders.
+// The author link and the goal-body link are siblings, not nested —
+// HTML disallows nested <a> tags.
 function FeedCard({ goal }: { goal: any }) {
   const author = goal.author;
   const deadline = goal.target_completion_at
@@ -267,7 +270,10 @@ function FeedCard({ goal }: { goal: any }) {
           </Link>
         )}
 
-        <div className="flex items-stretch gap-4">
+        <Link
+          href={`/goals/public/${goal.id}`}
+          className="flex items-stretch gap-4 transition-opacity hover:opacity-80"
+        >
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2">
               <h3 className="font-heading text-sm font-medium truncate">
@@ -307,7 +313,7 @@ function FeedCard({ goal }: { goal: any }) {
             <MiniStat label="score" value={score.toLocaleString()} />
             <MiniStat label="streak" value={streak.toString()} />
           </div>
-        </div>
+        </Link>
       </CardContent>
     </Card>
   );

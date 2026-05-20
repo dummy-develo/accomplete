@@ -72,6 +72,24 @@ export async function getGoalById(supabase: SupabaseClient
     return result;
 }
 
+// Public read of any user's goal by id. Drops the user_id filter; the
+// goals RLS policy ("Public goals are viewable by everyone") enforces
+// is_public + non-deleted, and the explicit eq() calls here are
+// defense-in-depth in case RLS changes. No streak reset — never write
+// to another user's goal on a read.
+export async function getPublicGoalById(
+    supabase: SupabaseClient,
+    goalId: string,
+) {
+    return await supabase
+        .from('goals')
+        .select('*')
+        .eq('id', goalId)
+        .eq('is_public', true)
+        .eq('is_deleted', false)
+        .single();
+}
+
 export async function createGoal(supabase: SupabaseClient,
     userId: string,
     body: Record<string, unknown>

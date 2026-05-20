@@ -435,14 +435,22 @@ function OwnerGoalLink({
   );
 }
 
-// Non-clickable wrapper for other users' goals
+// Non-owner viewers link to the read-only public goal page.
 function PublicGoalWrapper({
+  goalId,
   children,
 }: {
-  goalId?: string;
+  goalId: string;
   children: React.ReactNode;
 }) {
-  return <div>{children}</div>;
+  return (
+    <Link
+      href={`/goals/public/${goalId}`}
+      className="block transition-opacity hover:opacity-80"
+    >
+      {children}
+    </Link>
+  );
 }
 
 function MiniStat({ label, value }: { label: string; value: string }) {
