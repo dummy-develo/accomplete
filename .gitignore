@@ -27,3 +27,10 @@ Thumbs.db
 
 # Supabase local
 supabase/.temp/
+
+# Python / pytest
+tests/**/.venv*/
+tests/**/__pycache__/
+tests/**/.pytest_cache/
+tests/**/reports/
+*.pyc
