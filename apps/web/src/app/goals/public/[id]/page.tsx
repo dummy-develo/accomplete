@@ -155,15 +155,19 @@ function GoalHeader({ goal }: { goal: Goal }) {
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold tracking-tight">{name}</h1>
+            <h1 className="text-2xl font-bold tracking-tight break-words min-w-0">
+              {name}
+            </h1>
             {goalType && (
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground break-words min-w-0">
                 {goalType}
               </span>
             )}
           </div>
           {description && (
-            <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+            <p className="mt-2 text-sm text-muted-foreground break-words whitespace-pre-wrap">
+              {description}
+            </p>
           )}
         </div>
         <StatusBadge status={goal.status} />
@@ -397,7 +401,7 @@ function TimelineRow({
           </span>
         )}
         {item.data.notes && (
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <p className="mt-0.5 text-xs text-muted-foreground break-words whitespace-pre-wrap">
             {item.data.notes}
           </p>
         )}
@@ -408,7 +412,7 @@ function TimelineRow({
     label = `milestone ${item.data.order_index ?? ""} reached`.trim();
     if (item.data.message) {
       details = (
-        <p className="mt-0.5 text-xs italic text-muted-foreground">
+        <p className="mt-0.5 text-xs italic text-muted-foreground break-words whitespace-pre-wrap">
           &ldquo;{item.data.message}&rdquo;
         </p>
       );
@@ -418,7 +422,7 @@ function TimelineRow({
     label = `milestone ${item.data.order_index ?? ""}`.trim();
     if (item.data.message) {
       details = (
-        <p className="mt-0.5 text-xs italic text-muted-foreground">
+        <p className="mt-0.5 text-xs italic text-muted-foreground break-words whitespace-pre-wrap">
           &ldquo;{item.data.message}&rdquo;
         </p>
       );

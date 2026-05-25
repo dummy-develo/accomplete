@@ -27,6 +27,7 @@ import {
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { FIELD_LIMITS, NUMERIC_BOUNDS, clampToBounds } from "@/lib/constants";
 
 type Goal = any;
 type Milestone = any;
@@ -186,17 +187,17 @@ function GoalHeader({
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold tracking-tight">
+            <h1 className="text-2xl font-bold tracking-tight break-words min-w-0">
               {goal.goal_name}
             </h1>
             {goal.goal_type && (
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground break-words min-w-0">
                 {goal.goal_type}
               </span>
             )}
           </div>
           {goal.goal_description && (
-            <p className="mt-2 text-sm text-muted-foreground">
+            <p className="mt-2 text-sm text-muted-foreground break-words whitespace-pre-wrap">
               {goal.goal_description}
             </p>
           )}
@@ -455,7 +456,7 @@ function CheckInForm({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          metric_value: metricValue ? Number(metricValue) : null,
+          metric_value: metricValue ? Number(clampToBounds(metricValue)) : null,
           notes: notes.trim() || null,
         }),
       });
@@ -499,8 +500,11 @@ function CheckInForm({
                 <input
                   type="number"
                   step="any"
+                  min={NUMERIC_BOUNDS.min}
+                  max={NUMERIC_BOUNDS.max}
                   value={metricValue}
                   onChange={(e) => setMetricValue(e.target.value)}
+                  onBlur={(e) => setMetricValue(clampToBounds(e.target.value))}
                   placeholder="0"
                   className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
@@ -513,6 +517,7 @@ function CheckInForm({
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={2}
+                  maxLength={FIELD_LIMITS.checkinNotes}
                   placeholder="optional"
                   className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
                 />
@@ -693,7 +698,7 @@ function TimelineRow({
           </span>
         )}
         {item.data.notes && (
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <p className="mt-0.5 text-xs text-muted-foreground break-words whitespace-pre-wrap">
             {item.data.notes}
           </p>
         )}
@@ -704,7 +709,7 @@ function TimelineRow({
     label = `milestone ${item.data.order_index ?? ""} reached`.trim();
     if (item.data.message) {
       details = (
-        <p className="mt-0.5 text-xs italic text-muted-foreground">
+        <p className="mt-0.5 text-xs italic text-muted-foreground break-words whitespace-pre-wrap">
           &ldquo;{item.data.message}&rdquo;
         </p>
       );
@@ -714,7 +719,7 @@ function TimelineRow({
     label = `milestone ${item.data.order_index ?? ""}`.trim();
     if (item.data.message) {
       details = (
-        <p className="mt-0.5 text-xs italic text-muted-foreground">
+        <p className="mt-0.5 text-xs italic text-muted-foreground break-words whitespace-pre-wrap">
           &ldquo;{item.data.message}&rdquo;
         </p>
       );
