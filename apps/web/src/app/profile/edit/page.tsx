@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { FIELD_LIMITS } from "@/lib/constants";
 
 type Profile = any;
 
@@ -117,7 +118,7 @@ export default function ProfileEditPage() {
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                maxLength={50}
+                maxLength={FIELD_LIMITS.displayName}
                 placeholder="how others see you"
                 className="mt-1"
               />

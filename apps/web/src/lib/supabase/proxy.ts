@@ -52,7 +52,15 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  if (user && !request.nextUrl.pathname.startsWith('/onboarding')) {
+  // API routes are exempt: they handle their own auth and return JSON.
+  // Redirecting one turns a JSON call into an HTML page — which is exactly
+  // what breaks onboarding's save (it PATCHes /api/profile/me before a
+  // username exists).
+  if (
+    user &&
+    !request.nextUrl.pathname.startsWith('/onboarding') &&
+    !request.nextUrl.pathname.startsWith('/api')
+  ) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('username')

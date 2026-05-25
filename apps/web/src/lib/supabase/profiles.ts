@@ -1,5 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { resetStaleGlobalStreak } from "./streak";
+import { FIELD_LIMITS, validateUsername } from "@/lib/constants";
 
 const ALLOWED_UPDATE_FIELDS = [
     'username',
@@ -44,6 +45,26 @@ export async function updateProfile(
 
     if (Object.keys(updates).length === 0) {
         return { data: null, error: { message: 'No valid fields to update' } };
+    }
+
+    // Field-level validation. The DB has matching check constraints, but
+    // validating here returns a readable error instead of a raw 23514.
+    if (typeof updates.username === 'string') {
+        const usernameError = validateUsername(updates.username);
+        if (usernameError) {
+            return { data: null, error: { message: usernameError } };
+        }
+    }
+    if (
+        typeof updates.display_name === 'string' &&
+        updates.display_name.length > FIELD_LIMITS.displayName
+    ) {
+        return {
+            data: null,
+            error: {
+                message: `display name must be at most ${FIELD_LIMITS.displayName} characters`,
+            },
+        };
     }
 
     return await supabase

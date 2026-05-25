@@ -424,19 +424,19 @@ function GoalCard({ goal }: { goal: Goal }) {
         <CardContent className="flex items-stretch gap-4">
           {/* left — goal info */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-baseline gap-2">
-              <h3 className="font-heading text-sm font-medium truncate">
+            <div className="flex items-baseline gap-2 min-w-0">
+              <h3 className="font-heading text-sm font-medium truncate min-w-0">
                 {goal.goal_name}
               </h3>
               {goal.goal_type && (
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0 max-w-[40%] truncate">
                   {goal.goal_type}
                 </span>
               )}
             </div>
 
             {goal.goal_description && (
-              <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+              <p className="mt-1 text-xs text-muted-foreground line-clamp-2 break-words">
                 {goal.goal_description}
               </p>
             )}

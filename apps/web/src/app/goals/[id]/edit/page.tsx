@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { FIELD_LIMITS, NUMERIC_BOUNDS, clampToBounds } from "@/lib/constants";
 
 const PRIVACY_TOGGLES = [
   { key: "is_goal_name_public", label: "goal name" },
@@ -136,7 +137,7 @@ export default function EditGoal() {
       body.benchmark_name = form.benchmark_name || null;
     if (form.benchmark_target_value !== original.benchmark_target_value)
       body.benchmark_target_value = form.benchmark_target_value
-        ? Number(form.benchmark_target_value)
+        ? Number(clampToBounds(form.benchmark_target_value))
         : null;
     if (form.target_completion_at !== original.target_completion_at)
       body.target_completion_at = new Date(
@@ -254,15 +255,27 @@ export default function EditGoal() {
               details
             </h2>
             <div className="flex flex-col gap-5">
-              <Field label="goal name" htmlFor="goal_name" required>
+              <Field
+                label="goal name"
+                htmlFor="goal_name"
+                required
+                current={form!.goal_name.length}
+                max={FIELD_LIMITS.goalName}
+              >
                 <Input
                   id="goal_name"
                   value={form!.goal_name}
                   onChange={(e) => updateField("goal_name", e.target.value)}
+                  maxLength={FIELD_LIMITS.goalName}
                 />
               </Field>
 
-              <Field label="description" htmlFor="goal_description">
+              <Field
+                label="description"
+                htmlFor="goal_description"
+                current={form!.goal_description.length}
+                max={FIELD_LIMITS.goalDescription}
+              >
                 <textarea
                   id="goal_description"
                   value={form!.goal_description}
@@ -270,27 +283,40 @@ export default function EditGoal() {
                     updateField("goal_description", e.target.value)
                   }
                   rows={3}
+                  maxLength={FIELD_LIMITS.goalDescription}
                   className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
               </Field>
 
-              <Field label="goal type" htmlFor="goal_type">
+              <Field
+                label="goal type"
+                htmlFor="goal_type"
+                current={form!.goal_type.length}
+                max={FIELD_LIMITS.goalType}
+              >
                 <Input
                   id="goal_type"
                   value={form!.goal_type}
                   onChange={(e) => updateField("goal_type", e.target.value)}
+                  maxLength={FIELD_LIMITS.goalType}
                   placeholder="workout, learning, project..."
                 />
               </Field>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <Field label="benchmark name" htmlFor="benchmark_name">
+                <Field
+                  label="benchmark name"
+                  htmlFor="benchmark_name"
+                  current={form!.benchmark_name.length}
+                  max={FIELD_LIMITS.benchmarkName}
+                >
                   <Input
                     id="benchmark_name"
                     value={form!.benchmark_name}
                     onChange={(e) =>
                       updateField("benchmark_name", e.target.value)
                     }
+                    maxLength={FIELD_LIMITS.benchmarkName}
                     placeholder="hours, pages, km..."
                   />
                 </Field>
@@ -300,9 +326,17 @@ export default function EditGoal() {
                     id="benchmark_target_value"
                     type="number"
                     step="any"
+                    min={NUMERIC_BOUNDS.min}
+                    max={NUMERIC_BOUNDS.max}
                     value={form!.benchmark_target_value}
                     onChange={(e) =>
                       updateField("benchmark_target_value", e.target.value)
+                    }
+                    onBlur={(e) =>
+                      updateField(
+                        "benchmark_target_value",
+                        clampToBounds(e.target.value)
+                      )
                     }
                   />
                 </Field>
@@ -382,7 +416,12 @@ export default function EditGoal() {
             <h2 className="text-xs uppercase tracking-widest text-muted-foreground mb-4">
               completion message
             </h2>
-            <Field label="message" htmlFor="completion_message">
+            <Field
+              label="message"
+              htmlFor="completion_message"
+              current={form!.completion_message.length}
+              max={FIELD_LIMITS.completionMessage}
+            >
               <textarea
                 id="completion_message"
                 value={form!.completion_message}
@@ -390,6 +429,7 @@ export default function EditGoal() {
                   updateField("completion_message", e.target.value)
                 }
                 rows={4}
+                maxLength={FIELD_LIMITS.completionMessage}
                 placeholder="a message from present-you to future-you, revealed when you finish."
                 className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
@@ -438,19 +478,30 @@ function Field({
   label,
   htmlFor,
   required,
+  current,
+  max,
   children,
 }: {
   label: string;
   htmlFor: string;
   required?: boolean;
+  current?: number;
+  max?: number;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <Label htmlFor={htmlFor} className="text-xs uppercase tracking-widest">
-        {label}
-        {required && <span className="text-red-500 ml-0.5">*</span>}
-      </Label>
+      <div className="flex items-baseline justify-between gap-2">
+        <Label htmlFor={htmlFor} className="text-xs uppercase tracking-widest">
+          {label}
+          {required && <span className="text-red-500 ml-0.5">*</span>}
+        </Label>
+        {max != null && current != null && (
+          <span className="text-[10px] tabular-nums text-muted-foreground">
+            {current}/{max}
+          </span>
+        )}
+      </div>
       {children}
     </div>
   );
