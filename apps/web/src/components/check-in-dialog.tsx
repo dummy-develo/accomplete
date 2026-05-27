@@ -16,6 +16,7 @@ import {
   NUMERIC_BOUNDS,
   clampToBounds,
 } from "@/lib/constants";
+import { todayInTimezone } from "@/lib/client-date";
 
 type Goal = any;
 
@@ -23,19 +24,14 @@ type CheckInDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   goal: Goal | null;
+  // Owner's stored timezone — needed so "already checked in today" matches
+  // the server's notion of today (which is also derived from this zone).
+  // Pass null if not yet loaded; the helper falls back to UTC.
+  timezone?: string | null;
   // Called once the check-in API returns success. Parent typically refetches
   // its data here so streaks / check-in pills update.
   onSuccess?: () => void;
 };
-
-// Local YYYY-MM-DD — matches the format Postgres returns for
-// `goal.last_checkin_date` and avoids UTC drift on late-evening check-ins.
-function localDateString(date: Date = new Date()): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 function formatMonoDate(date: Date = new Date()): string {
   const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(
@@ -53,6 +49,7 @@ export function CheckInDialog({
   open,
   onOpenChange,
   goal,
+  timezone,
   onSuccess,
 }: CheckInDialogProps) {
   const [metricValue, setMetricValue] = useState("");
@@ -80,7 +77,7 @@ export function CheckInDialog({
 
   if (!goal) return null;
 
-  const today = localDateString();
+  const today = todayInTimezone(timezone);
   const alreadyCheckedInToday = goal.last_checkin_date === today;
   const nextStreak = (goal.current_streak ?? 0) + 1;
   const benchmarkName: string | null = goal.benchmark_name ?? null;

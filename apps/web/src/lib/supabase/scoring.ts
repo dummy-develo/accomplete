@@ -1,16 +1,17 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { BASE_CHECKIN_VALUE, COMPLETION_MULTIPLIER } from "../constants";
-import { calculateGoalStreak } from "./streak";
+import { calculateGoalStreak, todayInTimezone } from "./streak";
 
 // Scores a check-in if the user hasn't already scored one today for this goal.
 // Returns the points earned (either checkin_value or 0).
+// `today` should be YYYY-MM-DD in the user's stored timezone so the date
+// stamped on the goal matches what the client compares against.
 export async function scoreCheckin(
     supabase: SupabaseClient,
     goal: { id: string; user_id: string; checkin_value: number; score_checkin: number; last_checkin_date: string | null; current_streak: number; best_streak: number },
     checkinId: string,
+    today: string = todayInTimezone(),
 ) {
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-
     // Already scored a check-in today — this one gets 0
     if (goal.last_checkin_date === today) {
         return { pointsEarned: 0 };
@@ -20,7 +21,7 @@ export async function scoreCheckin(
     const newScoreCheckin = (goal.score_checkin ?? 0) + points;
 
     // Calculate updated streak values
-    const streak = calculateGoalStreak(goal);
+    const streak = calculateGoalStreak(goal, today);
 
     // Update the check-in row with actual points
     await supabase

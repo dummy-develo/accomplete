@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { FIELD_LIMITS } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
+import { detectBrowserTimezone } from "@/lib/client-date";
 
 type Profile = any;
 
@@ -21,10 +22,17 @@ export default function SettingsPage() {
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [displayName, setDisplayName] = useState("");
+  const [timezone, setTimezone] = useState("UTC");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+
+  // Full IANA timezone list. Intl.supportedValuesOf returns the same set the
+  // browser uses for DateTimeFormat — guaranteed to match what the server
+  // accepts (server validates by trying to construct an Intl formatter).
+  const timezoneOptions = getTimezoneOptions();
+  const browserTimezone = detectBrowserTimezone();
 
   useEffect(() => {
     (async () => {
@@ -37,6 +45,7 @@ export default function SettingsPage() {
         }
         setProfile(json.profile);
         setDisplayName(json.profile.display_name ?? "");
+        setTimezone(json.profile.timezone ?? "UTC");
       } catch (err: any) {
         setSaveError(err.message);
       } finally {
@@ -54,7 +63,10 @@ export default function SettingsPage() {
       const res = await fetch("/api/profile/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ display_name: displayName.trim() }),
+        body: JSON.stringify({
+          display_name: displayName.trim(),
+          timezone,
+        }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -78,7 +90,9 @@ export default function SettingsPage() {
     router.refresh();
   }
 
-  const dirty = (profile?.display_name ?? "") !== displayName.trim();
+  const dirty =
+    (profile?.display_name ?? "") !== displayName.trim() ||
+    (profile?.timezone ?? "UTC") !== timezone;
 
   return (
     <AppShell>
@@ -107,6 +121,31 @@ export default function SettingsPage() {
                 maxLength={FIELD_LIMITS.displayName}
                 placeholder="how others see you"
               />
+            </Field>
+
+            <Field label="timezone">
+              <select
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {timezoneOptions.map((tz) => (
+                  <option key={tz} value={tz}>
+                    {tz}
+                  </option>
+                ))}
+              </select>
+              {/* Soft nudge when the stored zone disagrees with the browser.
+                 Helps users notice if they're still on the UTC default. */}
+              {browserTimezone && browserTimezone !== timezone && (
+                <button
+                  type="button"
+                  onClick={() => setTimezone(browserTimezone)}
+                  className="mt-1 text-left text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  use detected: {browserTimezone}
+                </button>
+              )}
             </Field>
 
             {saveError && (
@@ -198,4 +237,33 @@ function ComingSoon() {
   return (
     <p className="text-xs text-muted-foreground italic">coming soon.</p>
   );
+}
+
+// Intl.supportedValuesOf is the standard IANA list. Falls back to a small
+// hand-picked set if the runtime doesn't support it (older browsers); UTC
+// stays first so the default is always visible at the top.
+function getTimezoneOptions(): string[] {
+  try {
+    const supported = (Intl as unknown as {
+      supportedValuesOf?: (key: string) => string[];
+    }).supportedValuesOf;
+    if (typeof supported === "function") {
+      return supported.call(Intl, "timeZone");
+    }
+  } catch {
+    // fall through to fallback list
+  }
+  return [
+    "UTC",
+    "Asia/Kolkata",
+    "Asia/Tokyo",
+    "Asia/Singapore",
+    "Australia/Sydney",
+    "Europe/London",
+    "Europe/Berlin",
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+  ];
 }

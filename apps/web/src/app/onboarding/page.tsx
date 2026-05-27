@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { FIELD_LIMITS, validateUsername } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { detectBrowserTimezone } from "@/lib/client-date";
 
 // idle    — field empty, nothing to show
 // checking — valid format, availability query in flight (debounced)
@@ -92,6 +93,9 @@ export default function Onboarding() {
         body: JSON.stringify({
           username,
           display_name: displayName.trim(),
+          // Seed timezone from the browser so new signups don't all default
+          // to UTC. User can change it later in Settings.
+          timezone: detectBrowserTimezone(),
         }),
       });
       const json = await res.json();

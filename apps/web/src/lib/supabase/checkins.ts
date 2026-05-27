@@ -1,6 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { scoreCheckin, scoreMilestoneReach } from "./scoring";
-import { calculateGlobalStreak } from "./streak";
+import { calculateGlobalStreak, todayInTimezone } from "./streak";
 
 export async function getCheckinsByGoal(
     supabase: SupabaseClient,
@@ -36,6 +36,17 @@ export async function createCheckin(
         return { data: null, error: { message: 'Goal not found or not active' } };
     }
 
+    // "Today" is derived from the user's stored timezone — the DB is the
+    // source of truth, not the wire. We fetch the profile once here both for
+    // the timezone and for the global-streak update below.
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, timezone, last_checkin_date, global_streak, highest_streak')
+        .eq('id', userId)
+        .single();
+
+    const today = todayInTimezone(profile?.timezone);
+
     // Insert the check-in with 0 points initially — scoring updates it if earned
     const { data: checkin, error: checkinError } = await supabase
         .from('checkins')
@@ -54,23 +65,15 @@ export async function createCheckin(
     }
 
     // Score the check-in (10 pts if first of the day, 0 otherwise)
-    const { pointsEarned } = await scoreCheckin(supabase, goal, checkin.id);
+    const { pointsEarned } = await scoreCheckin(supabase, goal, checkin.id, today);
 
     // Update global streak on the profile (at least one check-in today = streak continues)
-    if (pointsEarned > 0) {
-        const { data: profile } = await supabase
+    if (pointsEarned > 0 && profile) {
+        const streakUpdate = calculateGlobalStreak(profile, today);
+        await supabase
             .from('profiles')
-            .select('id, last_checkin_date, global_streak, highest_streak')
-            .eq('id', userId)
-            .single();
-
-        if (profile) {
-            const streakUpdate = calculateGlobalStreak(profile);
-            await supabase
-                .from('profiles')
-                .update(streakUpdate)
-                .eq('id', userId);
-        }
+            .update(streakUpdate)
+            .eq('id', userId);
     }
 
     // Check for milestones that have reached their target_date

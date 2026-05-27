@@ -1,26 +1,41 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 
-// Returns today's date as YYYY-MM-DD
-function getToday(): string {
-    return new Date().toISOString().split('T')[0];
+// Returns "today" as YYYY-MM-DD in the given IANA timezone (e.g.
+// "Asia/Kolkata"). The 'en-CA' locale formats Y/M/D natively as YYYY-MM-DD,
+// so no string juggling is needed. Falls back to UTC if the zone is missing
+// or invalid — Intl throws on a bad timezone string, and we'd rather degrade
+// gracefully than 500 a check-in.
+export function todayInTimezone(timezone?: string | null): string {
+    try {
+        if (timezone) {
+            return new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date());
+        }
+    } catch {
+        // Invalid timezone string — fall through to UTC.
+    }
+    return new Date().toISOString().split("T")[0];
 }
 
-// Returns yesterday's date as YYYY-MM-DD
-function getYesterday(): string {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
+// Returns the day before `today` (YYYY-MM-DD). Parses as UTC to avoid the
+// host's timezone shifting the boundary — date arithmetic on date-only
+// strings should be timezone-agnostic.
+function dayBefore(today: string): string {
+    const d = new Date(`${today}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
     return d.toISOString().split('T')[0];
 }
 
 // Pure computation — calculates new streak values when a check-in is scored.
 // Called from scoreCheckin() so the returned values get written in the same goal update.
-export function calculateGoalStreak(goal: {
-    last_checkin_date: string | null;
-    current_streak: number;
-    best_streak: number;
-}): { current_streak: number; best_streak: number } {
-    const today = getToday();
-    const yesterday = getYesterday();
+export function calculateGoalStreak(
+    goal: {
+        last_checkin_date: string | null;
+        current_streak: number;
+        best_streak: number;
+    },
+    today: string = todayInTimezone(),
+): { current_streak: number; best_streak: number } {
+    const yesterday = dayBefore(today);
 
     // Already checked in today — no streak change (extra same-day check-in)
     if (goal.last_checkin_date === today) {
@@ -48,13 +63,15 @@ export function calculateGoalStreak(goal: {
 
 // Pure computation — calculates new global streak values when any check-in is scored.
 // Same logic as per-goal streak but operates on the profile's last_checkin_date.
-export function calculateGlobalStreak(profile: {
-    last_checkin_date: string | null;
-    global_streak: number;
-    highest_streak: number;
-}): { global_streak: number; highest_streak: number; last_checkin_date: string } {
-    const today = getToday();
-    const yesterday = getYesterday();
+export function calculateGlobalStreak(
+    profile: {
+        last_checkin_date: string | null;
+        global_streak: number;
+        highest_streak: number;
+    },
+    today: string = todayInTimezone(),
+): { global_streak: number; highest_streak: number; last_checkin_date: string } {
+    const yesterday = dayBefore(today);
 
     // Already checked in today — no streak change
     if (profile.last_checkin_date === today) {
@@ -89,8 +106,9 @@ export function calculateGlobalStreak(profile: {
 export async function resetStaleGlobalStreak(
     supabase: SupabaseClient,
     profile: any,
+    today: string = todayInTimezone(),
 ): Promise<any> {
-    const yesterday = getYesterday();
+    const yesterday = dayBefore(today);
 
     if (
         profile.global_streak > 0 &&
@@ -114,8 +132,9 @@ export async function resetStaleGlobalStreak(
 export async function resetStaleStreaks(
     supabase: SupabaseClient,
     goals: any[],
+    today: string = todayInTimezone(),
 ): Promise<any[]> {
-    const yesterday = getYesterday();
+    const yesterday = dayBefore(today);
 
     const staleGoals = goals.filter(
         (g) => g.current_streak > 0 && g.last_checkin_date && g.last_checkin_date < yesterday

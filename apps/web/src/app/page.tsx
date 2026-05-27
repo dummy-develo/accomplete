@@ -12,20 +12,11 @@ import { HeroStat } from "@/components/atoms/hero-stat";
 import { CheckInDialog } from "@/components/check-in-dialog";
 import { TodayGoalCard } from "@/components/today/goal-card";
 import { TodayRightRail } from "@/components/today/right-rail";
+import { todayInTimezone } from "@/lib/client-date";
 
 // Placeholder aliases — swap for real types from packages/shared later.
 type Profile = any;
 type Goal = any;
-
-// Local YYYY-MM-DD. Used to compare against `goal.last_checkin_date`, which
-// Postgres returns as a date string. Using UTC here would misclassify
-// late-evening check-ins as belonging to tomorrow.
-function localDateString(date: Date = new Date()): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 function formatMonoDate(date: Date = new Date()): string {
   const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(
@@ -91,7 +82,10 @@ export default function Home() {
   }, [load]);
 
   const now = new Date();
-  const today = localDateString(now);
+  // Use the user's stored timezone so "today" matches what the server wrote
+  // to last_checkin_date. Profile may not be loaded on first paint — that's
+  // fine, the comparison just resolves to UTC for one render until data arrives.
+  const today = todayInTimezone(profile?.timezone);
   const monoDate = formatMonoDate(now);
   const greeting = greetingFor(now);
   const firstName =
@@ -186,6 +180,7 @@ export default function Home() {
           if (!open) setCheckInGoal(null);
         }}
         goal={checkInGoal}
+        timezone={profile?.timezone}
         onSuccess={load}
       />
     </AppShell>

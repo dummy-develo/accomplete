@@ -8,7 +8,6 @@ export async function GET(request: NextRequest) {
 
     const status = request.nextUrl.searchParams.get('status');
 
-    
     console.log('GET request recieved');
     const auth = await verifyUser(request);
     if(!auth){

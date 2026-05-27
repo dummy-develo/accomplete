@@ -53,6 +53,9 @@ export default function GoalDetail() {
   const [goal, setGoal] = useState<Goal | null>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [checkins, setCheckins] = useState<Checkin[]>([]);
+  // Owner's stored timezone — needed so the check-in dialog's "already
+  // checked in today" computation matches the server's notion of today.
+  const [timezone, setTimezone] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [timelineLoading, setTimelineLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,13 +65,20 @@ export default function GoalDetail() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/goals/${goalId}`);
-      const json = await res.json();
-      if (!res.ok || !json.goal) {
+      const [goalRes, meRes] = await Promise.all([
+        fetch(`/api/goals/${goalId}`),
+        fetch("/api/profile/me"),
+      ]);
+      const goalJson = await goalRes.json();
+      if (!goalRes.ok || !goalJson.goal) {
         setError("goal not found");
         return;
       }
-      setGoal(json.goal);
+      setGoal(goalJson.goal);
+      if (meRes.ok) {
+        const meJson = await meRes.json();
+        setTimezone(meJson.profile?.timezone ?? null);
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -165,6 +175,7 @@ export default function GoalDetail() {
         open={checkInOpen}
         onOpenChange={setCheckInOpen}
         goal={goal}
+        timezone={timezone}
         onSuccess={() => {
           loadGoal();
           loadTimeline();

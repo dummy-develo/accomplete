@@ -1,16 +1,28 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { resetStaleGlobalStreak } from "./streak";
+import { resetStaleGlobalStreak, todayInTimezone } from "./streak";
 import { FIELD_LIMITS, validateUsername } from "@/lib/constants";
 
 const ALLOWED_UPDATE_FIELDS = [
     'username',
     'display_name',
     'avatar_url',
+    'timezone',
 ];
+
+// IANA timezone validation. Intl.DateTimeFormat throws on an unknown zone,
+// which is the cheapest way to validate without bundling a list.
+function isValidTimezone(tz: string): boolean {
+    try {
+        new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 export async function getOwnProfile(
     supabase: SupabaseClient,
-    userId: string
+    userId: string,
 ) {
     const result = await supabase
         .from('profiles')
@@ -19,9 +31,12 @@ export async function getOwnProfile(
         .eq('is_deleted', false)
         .single();
 
-    // Reset global streak if the user missed a day (write-on-read cleanup)
+    // Reset global streak if the user missed a day (write-on-read cleanup).
+    // "Today" is derived from the user's stored timezone so the reset fires
+    // on their local midnight, not the server's UTC midnight.
     if (result.data) {
-        result.data = await resetStaleGlobalStreak(supabase, result.data);
+        const today = todayInTimezone(result.data.timezone);
+        result.data = await resetStaleGlobalStreak(supabase, result.data, today);
     }
 
     return result;
@@ -66,6 +81,9 @@ export async function updateProfile(
             },
         };
     }
+    if (typeof updates.timezone === 'string' && !isValidTimezone(updates.timezone)) {
+        return { data: null, error: { message: 'Invalid timezone' } };
+    }
 
     return await supabase
         .from('profiles')
@@ -77,18 +95,24 @@ export async function updateProfile(
 
 export async function getPublicProfile(
     supabase: SupabaseClient,
-    username: string
+    username: string,
 ) {
     const result = await supabase
         .from('profiles')
-        .select('id, username, display_name, avatar_url, total_score, global_streak, highest_streak, completed_goals_count, active_goals_count, dropped_goals_count, created_at, last_checkin_date')
+        .select('id, username, display_name, avatar_url, timezone, total_score, global_streak, highest_streak, completed_goals_count, active_goals_count, dropped_goals_count, created_at, last_checkin_date')
         .eq('username', username)
         .eq('is_deleted', false)
         .single();
 
-    // Reset global streak if the user missed a day (write-on-read cleanup)
+    // Stale-streak reset uses the viewee's stored timezone — no viewer
+    // bleed-through. The timezone is selected above but not returned to the
+    // caller (we strip it before responding).
     if (result.data) {
-        result.data = await resetStaleGlobalStreak(supabase, result.data);
+        const today = todayInTimezone(result.data.timezone);
+        result.data = await resetStaleGlobalStreak(supabase, result.data, today);
+        // Don't leak the viewee's timezone in the public payload.
+        const { timezone: _tz, ...rest } = result.data as Record<string, unknown>;
+        result.data = rest as typeof result.data;
     }
 
     return result;

@@ -8,7 +8,7 @@ export async function GET(
 ) {
 
     const { id } = await params;
-    
+
     console.log('[log] GET goal by id request recieved');
     const auth = await verifyUser(request);
     if(!auth){
@@ -21,7 +21,7 @@ export async function GET(
     console.log('[log] User user_id = ' + userId + 'is fetching  goal id='+id);
 
 
-    const {data : goal , error} = await getGoalById(supabase,id, userId);
+    const {data : goal , error} = await getGoalById(supabase, id, userId);
 
     console.log('[log] fetch goal by id complete');
 

@@ -1,8 +1,19 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { createMilestones, deleteUnreachedMilestones, getMilestonesByGoal } from "./milestones";
 import { scoreGoalCompletion } from "./scoring";
-import { resetStaleStreaks } from "./streak";
+import { resetStaleStreaks, todayInTimezone } from "./streak";
 import { BASE_CHECKIN_VALUE, getMilestoneCount } from "../constants";
+
+// One-shot lookup of the user's stored timezone. Used by streak-reset paths
+// where the caller doesn't already have the profile in hand.
+async function getUserTimezone(supabase: SupabaseClient, userId: string): Promise<string | null> {
+    const { data } = await supabase
+        .from('profiles')
+        .select('timezone')
+        .eq('id', userId)
+        .single();
+    return data?.timezone ?? null;
+}
 
 const ALLOWED_UPDATE_FIELDS = [
     'goal_name', 'goal_description', 'goal_type', 'category',
@@ -21,9 +32,9 @@ const ALLOWED_STATUS_VALUES = [
 ];
 
 export async function getGoalsByUser(
-    supabase: SupabaseClient, 
+    supabase: SupabaseClient,
     userId: string,
-    status: string | null
+    status: string | null,
 ) {
     if (status && !ALLOWED_STATUS_VALUES.includes(status)) {
         return { data: null, error: { message: 'Invalid status value' } };
@@ -41,9 +52,13 @@ export async function getGoalsByUser(
 
     const result = await query;
 
-    // Reset streaks for goals where the user missed a day (write-on-read cleanup)
+    // Reset streaks for goals where the user missed a day (write-on-read
+    // cleanup). Derived from the user's stored timezone so the boundary
+    // fires on their local midnight.
     if (result.data) {
-        result.data = await resetStaleStreaks(supabase, result.data);
+        const tz = await getUserTimezone(supabase, userId);
+        const today = todayInTimezone(tz);
+        result.data = await resetStaleStreaks(supabase, result.data, today);
     }
 
     return result;
@@ -51,9 +66,10 @@ export async function getGoalsByUser(
 
 
 
-export async function getGoalById(supabase: SupabaseClient
-    , goalId: string,
-    userId: string
+export async function getGoalById(
+    supabase: SupabaseClient,
+    goalId: string,
+    userId: string,
 ) {
     const result = await supabase
         .from('goals')
@@ -63,9 +79,12 @@ export async function getGoalById(supabase: SupabaseClient
         .eq('is_deleted', false)
         .single();
 
-    // Reset streak if the user missed a day (write-on-read cleanup)
+    // Reset streak if the user missed a day (write-on-read cleanup). Today
+    // is derived from the user's stored timezone.
     if (result.data) {
-        const [corrected] = await resetStaleStreaks(supabase, [result.data]);
+        const tz = await getUserTimezone(supabase, userId);
+        const today = todayInTimezone(tz);
+        const [corrected] = await resetStaleStreaks(supabase, [result.data], today);
         result.data = corrected;
     }
 
