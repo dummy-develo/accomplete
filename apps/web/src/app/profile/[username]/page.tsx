@@ -1,10 +1,12 @@
-// Profile page — works for both your own profile and other users'.
-// Ownership is detected by comparing the profile's ID with the logged-in user's ID.
+// Profile page — works for both your own profile and others'. Ownership
+// detected by comparing the viewed profile's id with the logged-in user's id.
 "use client";
 
-import { House } from "@phosphor-icons/react";
+import { AppShell } from "@/components/layout/app-shell";
+import { BackLink } from "@/components/atoms/back-link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { HeroStat } from "@/components/atoms/hero-stat";
+import { PublicGoalCard } from "@/components/public-goal-card";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -27,7 +29,6 @@ export default function ProfilePage() {
     setError(null);
 
     try {
-      // Fetch the viewed profile, their public goals, and the logged-in user in parallel
       const [profileRes, goalsRes, meRes, relationRes] = await Promise.all([
         fetch(`/api/profile/${username}`),
         fetch(`/api/profile/${username}/goals`),
@@ -36,7 +37,7 @@ export default function ProfilePage() {
       ]);
 
       if (!profileRes.ok) {
-        setError("Profile not found");
+        setError("profile not found");
         return;
       }
 
@@ -60,7 +61,6 @@ export default function ProfilePage() {
     loadData();
   }, [loadData]);
 
-  // bfcache: refetch when restored from back-forward cache
   useEffect(() => {
     function handlePageShow(e: PageTransitionEvent) {
       if (e.persisted) loadData();
@@ -69,26 +69,46 @@ export default function ProfilePage() {
     return () => window.removeEventListener("pageshow", handlePageShow);
   }, [loadData]);
 
-  if (loading) {
-    return (
-      <main className="w-full max-w-4xl mx-auto px-4 py-6">
-        <BackLink />
-        <p className="mt-10 text-sm text-muted-foreground">loading...</p>
-      </main>
-    );
-  }
+  return (
+    <AppShell>
+      <BackLink />
 
-  if (error || !profile) {
-    return (
-      <main className="w-full max-w-4xl mx-auto px-4 py-6">
-        <BackLink />
-        <p className="mt-10 text-sm text-red-500">
-          {error ?? "Profile not found"}
-        </p>
-      </main>
-    );
-  }
+      {loading && (
+        <p className="mt-12 text-sm text-muted-foreground">loading...</p>
+      )}
+      {error && !profile && (
+        <p className="mt-12 text-sm text-destructive">{error}</p>
+      )}
 
+      {!loading && profile && (
+        <ProfileBody
+          profile={profile}
+          username={username}
+          isOwner={isOwner}
+          relation={relation}
+          onRelationChange={setRelation}
+          goals={goals}
+        />
+      )}
+    </AppShell>
+  );
+}
+
+function ProfileBody({
+  profile,
+  username,
+  isOwner,
+  relation,
+  onRelationChange,
+  goals,
+}: {
+  profile: Profile;
+  username: string;
+  isOwner: boolean;
+  relation: any;
+  onRelationChange: (state: any) => void;
+  goals: Goal[];
+}) {
   // Block visibility:
   // - iBlockedThem: you blocked them — hide everything but identity + unblock
   // - theyBlockedMe: they blocked you — zeroed stats, no goals, no actions
@@ -98,58 +118,42 @@ export default function ProfilePage() {
     !isOwner && !iBlockedThem && (relation?.isBlockedByThem ?? false);
 
   return (
-    <main className="w-full max-w-4xl mx-auto px-4 py-6">
-      <BackLink />
+    <>
       <IdentitySection
         profile={profile}
-        isOwner={isOwner}
         username={username}
+        isOwner={isOwner}
         relation={relation}
-        onRelationChange={setRelation}
+        onRelationChange={onRelationChange}
       />
 
       {iBlockedThem ? (
-        <Card className="mt-8">
-          <CardContent className="py-10 text-center">
-            <p className="text-sm text-muted-foreground">
-              you blocked @{profile.username}. their stats and goals are
-              hidden. unblock to see this profile again.
-            </p>
-          </CardContent>
-        </Card>
+        <div className="mt-12 border border-dashed border-border rounded-xl px-8 py-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            you blocked @{profile.username}. their stats and goals are hidden.
+            unblock to see this profile again.
+          </p>
+        </div>
       ) : (
         <>
-          <StatsGrid profile={profile} zeroed={theyBlockedMe} />
+          <StatsRow profile={profile} zeroed={theyBlockedMe} />
           <PublicGoals goals={goals} isOwner={isOwner} />
         </>
       )}
-    </main>
-  );
-}
-
-function BackLink() {
-  return (
-    <nav className="pb-4 border-b">
-      <Link
-        href="/"
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <House size={16} /> home
-      </Link>
-    </nav>
+    </>
   );
 }
 
 function IdentitySection({
   profile,
-  isOwner,
   username,
+  isOwner,
   relation,
   onRelationChange,
 }: {
   profile: Profile;
-  isOwner: boolean;
   username: string;
+  isOwner: boolean;
   relation: any;
   onRelationChange: (state: any) => void;
 }) {
@@ -160,18 +164,23 @@ function IdentitySection({
       })
     : null;
 
+  const initials = (profile.display_name || profile.username || "??")
+    .slice(0, 2)
+    .toUpperCase();
+
   return (
-    <section className="mt-8 flex items-start gap-5">
-      {/* Avatar placeholder */}
-      <div className="w-16 h-16 rounded-full bg-muted shrink-0" />
+    <section className="mt-10 flex items-start gap-6">
+      <div className="size-20 rounded-full bg-muted shrink-0 flex items-center justify-center text-base font-mono">
+        {initials}
+      </div>
 
       <div className="flex-1 min-w-0">
-        <h1 className="text-lg font-bold truncate">
+        <h1 className="text-xl font-semibold tracking-tight truncate">
           {profile.display_name ?? profile.username}
         </h1>
         <p className="text-sm text-muted-foreground">@{profile.username}</p>
         {memberSince && (
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-2 font-mono">
             member since {memberSince}
           </p>
         )}
@@ -179,7 +188,7 @@ function IdentitySection({
 
       {isOwner ? (
         <Button variant="outline" size="sm" asChild>
-          <Link href="/profile/edit">edit profile</Link>
+          <Link href="/profile/edit">Edit profile</Link>
         </Button>
       ) : (
         <RelationActions
@@ -192,8 +201,8 @@ function IdentitySection({
   );
 }
 
-// Follow/unfollow + block/unblock. No client-side logic — each button
-// just hits the endpoint and adopts whatever relation state it returns.
+// Follow/unfollow + block/unblock. No client-side logic — each button just
+// hits the endpoint and adopts whatever relation state it returns.
 function RelationActions({
   username,
   relation,
@@ -220,26 +229,21 @@ function RelationActions({
   const iBlockedThem = relation?.isBlockedByMe ?? false;
   const theyBlockedMe = relation?.isBlockedByThem ?? false;
 
-  // You blocked them — only the unblock control.
   if (iBlockedThem) {
     return (
-      <div className="shrink-0">
-        <Button
-          variant="destructive"
-          size="sm"
-          disabled={busy}
-          onClick={() => act("block", "DELETE")}
-        >
-          unblock
-        </Button>
-      </div>
+      <Button
+        variant="destructive"
+        size="sm"
+        disabled={busy}
+        onClick={() => act("block", "DELETE")}
+      >
+        unblock
+      </Button>
     );
   }
 
-  // They blocked you — no actions at all (you can't tell you're blocked).
-  if (theyBlockedMe) {
-    return null;
-  }
+  // They blocked you — render nothing (the viewer shouldn't know).
+  if (theyBlockedMe) return null;
 
   return (
     <div className="flex gap-2 shrink-0">
@@ -247,9 +251,7 @@ function RelationActions({
         variant={isFollowing ? "outline" : "default"}
         size="sm"
         disabled={busy}
-        onClick={() =>
-          act("follow", isFollowing ? "DELETE" : "POST")
-        }
+        onClick={() => act("follow", isFollowing ? "DELETE" : "POST")}
       >
         {isFollowing ? "unfollow" : "follow"}
       </Button>
@@ -265,40 +267,19 @@ function RelationActions({
   );
 }
 
-// zeroed: render all stats as 0 (used when the viewer is blocked by this
-// user — they should not see real numbers).
-function StatsGrid({
-  profile,
-  zeroed,
-}: {
-  profile: Profile;
-  zeroed?: boolean;
-}) {
+function StatsRow({ profile, zeroed }: { profile: Profile; zeroed?: boolean }) {
+  // zeroed: render every stat as 0 when the viewer is blocked. Real numbers
+  // would leak progress information to a blocked observer.
   const v = (n: number) => (zeroed ? 0 : n);
   return (
-    <div className="grid grid-cols-3 gap-3 mt-8">
-      <StatCell label="score" value={v(profile.total_score ?? 0)} />
-      <StatCell label="global streak" value={v(profile.global_streak ?? 0)} />
-      <StatCell label="best streak" value={v(profile.highest_streak ?? 0)} />
-      <StatCell label="active goals" value={v(profile.active_goals_count ?? 0)} />
-      <StatCell label="completed" value={v(profile.completed_goals_count ?? 0)} />
-      <StatCell label="dropped" value={v(profile.dropped_goals_count ?? 0)} />
-    </div>
-  );
-}
-
-function StatCell({ label, value }: { label: string; value: number }) {
-  return (
-    <Card>
-      <CardContent className="flex flex-col items-start gap-1 py-2">
-        <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-          {label}
-        </span>
-        <span className="text-4xl font-bold tabular-nums leading-none">
-          {value.toLocaleString()}
-        </span>
-      </CardContent>
-    </Card>
+    <section className="mt-10 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8">
+      <HeroStat label="Score" value={v(profile.total_score ?? 0).toLocaleString()} />
+      <HeroStat label="Current streak" value={v(profile.global_streak ?? 0)} />
+      <HeroStat label="Best streak" value={v(profile.highest_streak ?? 0)} />
+      <HeroStat label="Active" value={v(profile.active_goals_count ?? 0)} />
+      <HeroStat label="Completed" value={v(profile.completed_goals_count ?? 0)} />
+      <HeroStat label="Dropped" value={v(profile.dropped_goals_count ?? 0)} />
+    </section>
   );
 }
 
@@ -310,158 +291,27 @@ function PublicGoals({
   isOwner: boolean;
 }) {
   return (
-    <section className="mt-10">
-      <h2 className="text-xs uppercase tracking-widest text-muted-foreground mb-4">
-        public goals
-      </h2>
+    <section className="mt-14">
+      <div className="flex items-baseline gap-3 mb-5">
+        <h2 className="text-sm font-semibold">Public goals</h2>
+        <span className="font-mono text-sm text-muted-foreground tabular-nums">
+          {goals.length}
+        </span>
+      </div>
 
       {goals.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center py-10 text-center">
-            <p className="text-sm text-muted-foreground">
-              no public goals yet.
-            </p>
-          </CardContent>
-        </Card>
+        <div className="border border-dashed border-border rounded-xl px-8 py-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            no public goals yet.
+          </p>
+        </div>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           {goals.map((goal) => (
             <PublicGoalCard key={goal.id} goal={goal} isOwner={isOwner} />
           ))}
         </div>
       )}
     </section>
-  );
-}
-
-// Goal card for public profile view. Respects privacy toggles unless
-// the viewer is the goal's owner (show everything on your own profile).
-function PublicGoalCard({
-  goal,
-  isOwner,
-}: {
-  goal: Goal;
-  isOwner: boolean;
-}) {
-  // Privacy masking: if not the owner, check per-field toggles
-  const name =
-    isOwner || goal.is_goal_name_public !== false
-      ? goal.goal_name
-      : "Private goal";
-
-  const description =
-    isOwner || goal.is_description_public !== false
-      ? goal.goal_description
-      : null;
-
-  const goalType =
-    isOwner || goal.is_goal_type_public !== false ? goal.goal_type : null;
-
-  const benchmarkName =
-    isOwner || goal.is_benchmark_name_public !== false
-      ? goal.benchmark_name
-      : "hidden";
-
-  const deadline = goal.target_completion_at
-    ? new Date(goal.target_completion_at).toLocaleDateString()
-    : "—";
-
-  const score = (goal.score_checkin ?? 0) + (goal.score_milestone ?? 0);
-  const streak = goal.current_streak ?? 0;
-
-  // Link to goal detail page only if you own it
-  const Wrapper = isOwner ? OwnerGoalLink : PublicGoalWrapper;
-
-  return (
-    <Wrapper goalId={goal.id}>
-      <Card>
-        <CardContent className="flex items-stretch gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-baseline gap-2">
-              <h3 className="font-heading text-sm font-medium truncate">
-                {name}
-              </h3>
-              {goalType && (
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">
-                  {goalType}
-                </span>
-              )}
-            </div>
-
-            {description && (
-              <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                {description}
-              </p>
-            )}
-
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-muted-foreground">
-              <span>
-                target:{" "}
-                <span className="text-foreground">
-                  {goal.benchmark_target_value} {benchmarkName}
-                </span>
-              </span>
-              <span>
-                deadline: <span className="text-foreground">{deadline}</span>
-              </span>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-end justify-between border-l pl-4 min-w-[84px]">
-            <MiniStat label="score" value={score.toLocaleString()} />
-            <MiniStat label="streak" value={streak.toString()} />
-          </div>
-        </CardContent>
-      </Card>
-    </Wrapper>
-  );
-}
-
-// Clickable link wrapper for owner's own goals
-function OwnerGoalLink({
-  goalId,
-  children,
-}: {
-  goalId: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={`/goals/${goalId}`}
-      className="block transition-opacity hover:opacity-80"
-    >
-      {children}
-    </Link>
-  );
-}
-
-// Non-owner viewers link to the read-only public goal page.
-function PublicGoalWrapper({
-  goalId,
-  children,
-}: {
-  goalId: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={`/goals/public/${goalId}`}
-      className="block transition-opacity hover:opacity-80"
-    >
-      {children}
-    </Link>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="text-right">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </div>
-      <div className="text-lg font-bold tabular-nums leading-none mt-0.5">
-        {value}
-      </div>
-    </div>
   );
 }

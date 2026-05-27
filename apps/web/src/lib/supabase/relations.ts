@@ -126,25 +126,21 @@ export async function getFollowingIds(
     return { ids: (data ?? []).map((r) => r.destination_id), error: null };
 }
 
-// Follower / following counts computed on the fly (no cached columns).
-export async function getFollowCounts(
+// Ids of users who follow the given user. Mirror of getFollowingIds for the
+// reverse direction. Used by the Social page's "Followers" tab.
+export async function getFollowerIds(
     supabase: SupabaseClient,
     userId: string
-) {
-    const { count: followers } = await supabase
+): Promise<{ ids: string[]; error: unknown }> {
+    const { data, error } = await supabase
         .from('relations')
-        .select('*', { count: 'exact', head: true })
+        .select('source_id')
         .eq('destination_id', userId)
         .eq('is_following', true);
 
-    const { count: following } = await supabase
-        .from('relations')
-        .select('*', { count: 'exact', head: true })
-        .eq('source_id', userId)
-        .eq('is_following', true);
+    if (error) {
+        return { ids: [], error };
+    }
 
-    return {
-        data: { followers: followers ?? 0, following: following ?? 0 },
-        error: null,
-    };
+    return { ids: (data ?? []).map((r) => r.source_id), error: null };
 }

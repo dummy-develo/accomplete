@@ -1,28 +1,37 @@
 // apps/web/src/app/goals/new/page.tsx
 //
-// Goal creation wizard — 4 steps: details, privacy, message, preview.
-// All steps rendered in one client page; a `step` number controls which
-// step is visible. No route changes between steps.
+// New-goal wizard — multi-step. Steps:
+//   1. Basics      — name, category, description
+//   2. Target      — benchmark + deadline + completion message
+//   3. Privacy     — is_public toggle + per-field visibility
+//   4. Confirm     — preview of how the goal card will look + create
+//
+// `step` controls which panel is visible. The whole form is held in one
+// state object so the user can navigate back and forth without losing input.
 "use client";
 
-import { House } from "@phosphor-icons/react";
+import { BackLink } from "@/components/atoms/back-link";
+import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
+import { ProgressWithMarker } from "@/components/atoms/progress-with-marker";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { FIELD_LIMITS, NUMERIC_BOUNDS, clampToBounds } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 
-const STEPS = ["details", "privacy", "message", "preview"] as const;
+const STEPS = ["Basics", "Target", "Privacy", "Confirm"] as const;
 
-// Privacy sub-field labels, keyed by form field name
+// Predefined category options shown as pills. "custom" reveals a text input.
+const CATEGORIES = ["fitness", "learning", "personal", "work", "health"] as const;
+
 const PRIVACY_TOGGLES = [
   { key: "is_goal_name_public", label: "goal name" },
   { key: "is_username_public", label: "username" },
   { key: "is_description_public", label: "description" },
-  { key: "is_goal_type_public", label: "goal type" },
   { key: "are_checkins_public", label: "check-ins" },
   { key: "is_benchmark_name_public", label: "benchmark name" },
 ] as const;
@@ -30,7 +39,8 @@ const PRIVACY_TOGGLES = [
 type FormData = {
   goal_name: string;
   goal_description: string;
-  goal_type: string;
+  category_selection: string; // "" | one of CATEGORIES | "custom"
+  custom_category: string;
   benchmark_name: string;
   benchmark_target_value: string;
   target_completion_at: string;
@@ -39,7 +49,6 @@ type FormData = {
   is_goal_name_public: boolean;
   is_username_public: boolean;
   is_description_public: boolean;
-  is_goal_type_public: boolean;
   are_checkins_public: boolean;
   is_benchmark_name_public: boolean;
 };
@@ -47,7 +56,8 @@ type FormData = {
 const INITIAL_FORM: FormData = {
   goal_name: "",
   goal_description: "",
-  goal_type: "",
+  category_selection: "",
+  custom_category: "",
   benchmark_name: "",
   benchmark_target_value: "",
   target_completion_at: "",
@@ -56,10 +66,16 @@ const INITIAL_FORM: FormData = {
   is_goal_name_public: true,
   is_username_public: true,
   is_description_public: true,
-  is_goal_type_public: true,
   are_checkins_public: true,
   is_benchmark_name_public: true,
 };
+
+function resolveCategory(form: FormData): string | null {
+  if (form.category_selection === "custom") {
+    return form.custom_category.trim() || null;
+  }
+  return form.category_selection || null;
+}
 
 export default function NewGoal() {
   const router = useRouter();
@@ -67,7 +83,6 @@ export default function NewGoal() {
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Per-step validation message (only step 1 needs it for now)
   const [validationError, setValidationError] = useState<string | null>(null);
 
   function updateField<K extends keyof FormData>(key: K, value: FormData[K]) {
@@ -75,19 +90,16 @@ export default function NewGoal() {
   }
 
   function goNext() {
-    // Validate step 1 required fields before proceeding
-    if (step === 1) {
-      if (!form.goal_name.trim()) {
-        setValidationError("goal name is required");
-        return;
-      }
-      if (!form.target_completion_at) {
-        setValidationError("target finish date is required");
-        return;
-      }
+    if (step === 1 && !form.goal_name.trim()) {
+      setValidationError("goal name is required");
+      return;
+    }
+    if (step === 2 && !form.target_completion_at) {
+      setValidationError("target finish date is required");
+      return;
     }
     setValidationError(null);
-    setStep((s) => Math.min(s + 1, 4));
+    setStep((s) => Math.min(s + 1, STEPS.length));
   }
 
   function goBack() {
@@ -102,7 +114,7 @@ export default function NewGoal() {
     const body: Record<string, unknown> = {
       goal_name: form.goal_name,
       goal_description: form.goal_description || null,
-      goal_type: form.goal_type || null,
+      category: resolveCategory(form),
       benchmark_name: form.benchmark_name || null,
       benchmark_target_value: form.benchmark_target_value
         ? Number(clampToBounds(form.benchmark_target_value))
@@ -114,12 +126,10 @@ export default function NewGoal() {
       is_public: form.is_public,
     };
 
-    // Only send per-field privacy toggles when the goal is public
     if (form.is_public) {
       body.is_goal_name_public = form.is_goal_name_public;
       body.is_username_public = form.is_username_public;
       body.is_description_public = form.is_description_public;
-      body.is_goal_type_public = form.is_goal_type_public;
       body.are_checkins_public = form.are_checkins_public;
       body.is_benchmark_name_public = form.is_benchmark_name_public;
     }
@@ -131,12 +141,10 @@ export default function NewGoal() {
         body: JSON.stringify(body),
       });
       const json = await res.json();
-
       if (!res.ok || !json.data) {
         setError(json.error?.message ?? "failed to create goal");
         return;
       }
-
       router.push(`/goals/${json.data.id}`);
     } catch (err: any) {
       setError(err.message);
@@ -146,35 +154,43 @@ export default function NewGoal() {
   }
 
   return (
-    <main className="w-full max-w-2xl mx-auto px-4 py-6">
-      <TopBar />
+    <AppShell>
+      <BackLink />
 
-      <header className="mt-8 mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">new goal</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          every field you fill in is a thing you can be held accountable to.
-        </p>
-      </header>
+      {/* Centered narrow column for the form. AppShell expands non-rail
+          pages to max-w-[1460px]; without this wrapper the form (which is
+          intentionally narrow at max-w-2xl) would float flush-left in the
+          wider canvas, creating a large right-side gap. */}
+      <div className="mx-auto max-w-2xl">
+        <header className="mt-8 mb-8">
+          <h1 className="text-2xl font-semibold tracking-tight">New goal</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            every field you fill in is a thing you can be held accountable to.
+          </p>
+        </header>
 
-      {/* Step indicator */}
-      <StepIndicator currentStep={step} />
+        <StepIndicator currentStep={step} />
 
-      <Card className="mt-6">
+        <Card className="mt-8">
         <CardContent className="py-6">
-          <div className="flex flex-col gap-5">
-            {step === 1 && <StepDetails form={form} updateField={updateField} />}
-            {step === 2 && <StepPrivacy form={form} updateField={updateField} />}
-            {step === 3 && <StepMessage form={form} updateField={updateField} />}
-            {step === 4 && <StepPreview form={form} />}
+          <div className="flex flex-col gap-6">
+            {step === 1 && (
+              <StepBasics form={form} updateField={updateField} />
+            )}
+            {step === 2 && (
+              <StepTarget form={form} updateField={updateField} />
+            )}
+            {step === 3 && (
+              <StepPrivacy form={form} updateField={updateField} />
+            )}
+            {step === 4 && <StepConfirm form={form} />}
 
-            {/* Validation / submission errors */}
             {(validationError || error) && (
-              <p className="text-sm text-red-500" role="alert">
+              <p className="text-sm text-destructive" role="alert">
                 {validationError ?? error}
               </p>
             )}
 
-            {/* Navigation buttons */}
             <div className="flex items-center justify-end gap-3 pt-2">
               {step === 1 && (
                 <Button variant="outline" asChild type="button">
@@ -186,57 +202,65 @@ export default function NewGoal() {
                   back
                 </Button>
               )}
-              {step < 4 && (
+              {step < STEPS.length && (
                 <Button type="button" onClick={goNext}>
                   next
                 </Button>
               )}
-              {step === 4 && (
+              {step === STEPS.length && (
                 <Button
                   type="button"
                   onClick={handleSubmit}
                   disabled={submitting}
                 >
-                  {submitting ? "creating..." : "create goal"}
+                  {submitting ? "creating..." : "Create goal"}
                 </Button>
               )}
             </div>
           </div>
         </CardContent>
-      </Card>
-    </main>
+        </Card>
+      </div>
+    </AppShell>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Step indicator                                                     */
-/* ------------------------------------------------------------------ */
-
 function StepIndicator({ currentStep }: { currentStep: number }) {
   return (
-    <div className="flex items-center justify-between gap-2">
+    <div className="flex items-center gap-2">
       {STEPS.map((label, i) => {
         const stepNum = i + 1;
-        const isActive = stepNum === currentStep;
-        const isCompleted = stepNum < currentStep;
+        const reached = stepNum <= currentStep;
         return (
-          <div key={label} className="flex flex-col items-center gap-1.5 flex-1">
-            <div
-              className={`h-2.5 w-2.5 rounded-full transition-colors ${
-                isActive || isCompleted
-                  ? "bg-foreground"
-                  : "border border-muted-foreground bg-transparent"
-              }`}
-            />
-            <span
-              className={`text-xs ${
-                isActive
-                  ? "text-foreground font-medium"
-                  : "text-muted-foreground"
-              }`}
-            >
-              {label}
-            </span>
+          <div key={label} className="flex items-center gap-2 flex-1">
+            <div className="flex items-center gap-2 min-w-0">
+              <span
+                className={cn(
+                  "size-1.5 rounded-full shrink-0 transition-colors",
+                  reached ? "bg-primary" : "bg-border",
+                )}
+              />
+              <span
+                className={cn(
+                  "text-xs",
+                  stepNum === currentStep
+                    ? "text-foreground"
+                    : "text-muted-foreground",
+                )}
+              >
+                {label}
+              </span>
+            </div>
+            {i < STEPS.length - 1 && (
+              <span
+                className={cn(
+                  "flex-1 h-px",
+                  reached && stepNum < currentStep
+                    ? "bg-primary"
+                    : "bg-border",
+                )}
+              />
+            )}
           </div>
         );
       })}
@@ -244,11 +268,7 @@ function StepIndicator({ currentStep }: { currentStep: number }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Step 1 — Goal Details                                              */
-/* ------------------------------------------------------------------ */
-
-function StepDetails({
+function StepBasics({
   form,
   updateField,
 }: {
@@ -269,8 +289,19 @@ function StepDetails({
           value={form.goal_name}
           onChange={(e) => updateField("goal_name", e.target.value)}
           maxLength={FIELD_LIMITS.goalName}
+          placeholder="run a half marathon"
         />
       </Field>
+
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-xs uppercase tracking-widest">category</Label>
+        <CategoryPicker
+          selection={form.category_selection}
+          customValue={form.custom_category}
+          onSelect={(s) => updateField("category_selection", s)}
+          onCustomChange={(v) => updateField("custom_category", v)}
+        />
+      </div>
 
       <Field
         label="description"
@@ -284,25 +315,90 @@ function StepDetails({
           onChange={(e) => updateField("goal_description", e.target.value)}
           rows={3}
           maxLength={FIELD_LIMITS.goalDescription}
-          className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </Field>
+    </>
+  );
+}
 
-      <Field
-        label="goal type"
-        htmlFor="goal_type"
-        current={form.goal_type.length}
-        max={FIELD_LIMITS.goalType}
-      >
+function CategoryPicker({
+  selection,
+  customValue,
+  onSelect,
+  onCustomChange,
+}: {
+  selection: string;
+  customValue: string;
+  onSelect: (s: string) => void;
+  onCustomChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-2">
+        {CATEGORIES.map((cat) => (
+          <CategoryPill
+            key={cat}
+            active={selection === cat}
+            onClick={() => onSelect(selection === cat ? "" : cat)}
+          >
+            {cat}
+          </CategoryPill>
+        ))}
+        <CategoryPill
+          active={selection === "custom"}
+          onClick={() => onSelect(selection === "custom" ? "" : "custom")}
+        >
+          custom
+        </CategoryPill>
+      </div>
+      {selection === "custom" && (
         <Input
-          id="goal_type"
-          value={form.goal_type}
-          onChange={(e) => updateField("goal_type", e.target.value)}
+          value={customValue}
+          onChange={(e) => onCustomChange(e.target.value)}
+          placeholder="type a category..."
           maxLength={FIELD_LIMITS.goalType}
-          placeholder="workout, learning, project..."
+          autoFocus
         />
-      </Field>
+      )}
+    </div>
+  );
+}
 
+function CategoryPill({
+  children,
+  active,
+  onClick,
+}: {
+  children: React.ReactNode;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "px-3 py-1.5 rounded-md text-xs border transition-colors",
+        active
+          ? "border-primary text-primary bg-primary/10"
+          : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/40",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function StepTarget({
+  form,
+  updateField,
+}: {
+  form: FormData;
+  updateField: <K extends keyof FormData>(key: K, value: FormData[K]) => void;
+}) {
+  return (
+    <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <Field
           label="benchmark name"
@@ -315,10 +411,9 @@ function StepDetails({
             value={form.benchmark_name}
             onChange={(e) => updateField("benchmark_name", e.target.value)}
             maxLength={FIELD_LIMITS.benchmarkName}
-            placeholder="hours, pages, km..."
+            placeholder="km, pages, hours..."
           />
         </Field>
-
         <Field label="target value" htmlFor="benchmark_target_value">
           <Input
             id="benchmark_target_value"
@@ -333,9 +428,10 @@ function StepDetails({
             onBlur={(e) =>
               updateField(
                 "benchmark_target_value",
-                clampToBounds(e.target.value)
+                clampToBounds(e.target.value),
               )
             }
+            placeholder="21"
           />
         </Field>
       </div>
@@ -348,13 +444,26 @@ function StepDetails({
           onChange={(e) => updateField("target_completion_at", e.target.value)}
         />
       </Field>
+
+      <Field
+        label="completion message"
+        htmlFor="completion_message"
+        current={form.completion_message.length}
+        max={FIELD_LIMITS.completionMessage}
+      >
+        <textarea
+          id="completion_message"
+          value={form.completion_message}
+          onChange={(e) => updateField("completion_message", e.target.value)}
+          rows={3}
+          maxLength={FIELD_LIMITS.completionMessage}
+          placeholder="a message from present-you to future-you, revealed when you finish."
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+      </Field>
     </>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  Step 2 — Privacy                                                   */
-/* ------------------------------------------------------------------ */
 
 function StepPrivacy({
   form,
@@ -365,25 +474,26 @@ function StepPrivacy({
 }) {
   return (
     <>
-      <label className="flex items-center gap-2 cursor-pointer select-none">
+      <label className="flex items-start gap-3 cursor-pointer select-none">
         <input
           type="checkbox"
           checked={form.is_public}
           onChange={(e) => updateField("is_public", e.target.checked)}
-          className="h-4 w-4"
+          className="h-4 w-4 mt-0.5 accent-primary"
         />
-        <span className="text-sm">
-          make this goal public
-          <span className="ml-2 text-xs text-muted-foreground">
-            (once public, can&apos;t be made private)
+        <span className="flex flex-col gap-1">
+          <span className="text-sm">make this goal public</span>
+          <span className="text-xs text-muted-foreground">
+            others can see it on your profile and in the feed. once public,
+            it can&apos;t be made private.
           </span>
         </span>
       </label>
 
       {form.is_public && (
-        <div className="flex flex-col gap-3 pl-6 border-l-2 border-muted">
+        <div className="flex flex-col gap-3 pl-7 border-l-2 border-border">
           <p className="text-xs text-muted-foreground">
-            choose which details are visible to others:
+            choose which details are visible:
           </p>
           {PRIVACY_TOGGLES.map(({ key, label }) => (
             <label
@@ -394,7 +504,7 @@ function StepPrivacy({
                 type="checkbox"
                 checked={form[key]}
                 onChange={(e) => updateField(key, e.target.checked)}
-                className="h-4 w-4"
+                className="h-4 w-4 accent-primary"
               />
               <span className="text-sm">{label}</span>
             </label>
@@ -405,71 +515,83 @@ function StepPrivacy({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Step 3 — Completion Message                                        */
-/* ------------------------------------------------------------------ */
-
-function StepMessage({
-  form,
-  updateField,
-}: {
-  form: FormData;
-  updateField: <K extends keyof FormData>(key: K, value: FormData[K]) => void;
-}) {
+function StepConfirm({ form }: { form: FormData }) {
   return (
-    <Field
-      label="completion message"
-      htmlFor="completion_message"
-      current={form.completion_message.length}
-      max={FIELD_LIMITS.completionMessage}
-    >
-      <textarea
-        id="completion_message"
-        value={form.completion_message}
-        onChange={(e) => updateField("completion_message", e.target.value)}
-        rows={4}
-        maxLength={FIELD_LIMITS.completionMessage}
-        placeholder="a message from present-you to future-you, revealed when you finish."
-        className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      />
-    </Field>
+    <div className="flex flex-col gap-6">
+      <div>
+        <p className="text-xs uppercase tracking-widest text-muted-foreground mb-3">
+          how it will look on your dashboard
+        </p>
+        <PreviewCard form={form} />
+      </div>
+
+      <div className="flex flex-col gap-3 pt-2">
+        <PreviewRow
+          label="privacy"
+          value={form.is_public ? "public" : "private"}
+        />
+        {form.completion_message && (
+          <PreviewRow
+            label="completion message"
+            value={form.completion_message}
+          />
+        )}
+      </div>
+    </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Step 4 — Preview                                                   */
-/* ------------------------------------------------------------------ */
+// Static lookalike of TodayGoalCard for the new-goal preview. Inlined here
+// (rather than reusing the real card) so we don't have to drag a fake `Goal`
+// object through the real component's Link wrapper.
+function PreviewCard({ form }: { form: FormData }) {
+  const category = resolveCategory(form);
+  const targetText =
+    form.benchmark_target_value && form.benchmark_name
+      ? `${form.benchmark_target_value} ${form.benchmark_name}`
+      : form.benchmark_name || null;
+  const categoryLine =
+    [category, targetText].filter(Boolean).join(" · ") || "—";
 
-function StepPreview({ form }: { form: FormData }) {
+  const now = new Date();
+  const end = form.target_completion_at
+    ? new Date(form.target_completion_at)
+    : new Date(now.getTime() + 1000 * 60 * 60 * 24 * 30);
+
+  const daysLeft = Math.max(
+    0,
+    Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+  );
+
   return (
-    <div className="flex flex-col gap-4">
-      <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-        review your goal
-      </h2>
-
-      <PreviewRow label="goal name" value={form.goal_name} />
-      <PreviewRow label="description" value={form.goal_description} />
-      <PreviewRow label="goal type" value={form.goal_type} />
-      <PreviewRow label="benchmark" value={
-        form.benchmark_name
-          ? `${form.benchmark_name}${form.benchmark_target_value ? ` — target: ${form.benchmark_target_value}` : ""}`
-          : null
-      } />
-      <PreviewRow label="target finish date" value={form.target_completion_at} />
-      <PreviewRow
-        label="privacy"
-        value={form.is_public ? "public" : "private"}
-      />
-      {form.is_public && (
-        <div className="pl-4 flex flex-col gap-1">
-          {PRIVACY_TOGGLES.map(({ key, label }) => (
-            <span key={key} className="text-sm text-muted-foreground">
-              {label}: {form[key] ? "visible" : "hidden"}
-            </span>
-          ))}
+    <div className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4 max-w-md">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-xs text-muted-foreground mb-1.5 truncate">
+            {categoryLine}
+          </div>
+          <h3 className="text-base font-semibold truncate text-foreground">
+            {form.goal_name || "(unnamed goal)"}
+          </h3>
         </div>
-      )}
-      <PreviewRow label="completion message" value={form.completion_message} />
+      </div>
+
+      <ProgressWithMarker start={now} end={end} now={now} />
+
+      <div className="flex items-center gap-6 text-xs">
+        <span className="flex items-baseline gap-1.5">
+          <span className="text-muted-foreground">streak</span>
+          <span className="font-mono tabular-nums">0</span>
+        </span>
+        <span className="flex items-baseline gap-1.5">
+          <span className="text-muted-foreground">points</span>
+          <span className="font-mono tabular-nums">0</span>
+        </span>
+        <span className="flex items-baseline gap-1.5">
+          <span className="text-muted-foreground">left</span>
+          <span className="font-mono tabular-nums">{daysLeft}d</span>
+        </span>
+      </div>
     </div>
   );
 }
@@ -479,7 +601,7 @@ function PreviewRow({
   value,
 }: {
   label: string;
-  value: string | null | undefined;
+  value: string | null;
 }) {
   return (
     <div className="flex flex-col gap-0.5">
@@ -491,25 +613,6 @@ function PreviewRow({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Shared helpers                                                     */
-/* ------------------------------------------------------------------ */
-
-function TopBar() {
-  return (
-    <nav className="flex items-center pb-4 border-b">
-      <Link
-        href="/"
-        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <House size={16} /> home
-      </Link>
-    </nav>
-  );
-}
-
-// Tiny wrapper that gives every field the same label-above-input layout
-// with an optional required asterisk.
 function Field({
   label,
   htmlFor,
@@ -530,7 +633,7 @@ function Field({
       <div className="flex items-baseline justify-between gap-2">
         <Label htmlFor={htmlFor} className="text-xs uppercase tracking-widest">
           {label}
-          {required && <span className="text-red-500 ml-0.5">*</span>}
+          {required && <span className="text-destructive ml-0.5">*</span>}
         </Label>
         {max != null && current != null && (
           <span className="text-[10px] tabular-nums text-muted-foreground">

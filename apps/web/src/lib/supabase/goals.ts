@@ -5,7 +5,7 @@ import { resetStaleStreaks } from "./streak";
 import { BASE_CHECKIN_VALUE, getMilestoneCount } from "../constants";
 
 const ALLOWED_UPDATE_FIELDS = [
-    'goal_name', 'goal_description', 'goal_type',
+    'goal_name', 'goal_description', 'goal_type', 'category',
     'benchmark_name', 'benchmark_target_value',
     'target_completion_at', 'completion_message',
     'is_public', 'is_goal_name_public', 'is_username_public',
@@ -99,6 +99,7 @@ export async function createGoal(supabase: SupabaseClient,
         goal_name: body.goal_name,
         goal_description: body.goal_description,
         goal_type: body.goal_type,
+        category: body.category,
         benchmark_name: body.benchmark_name,
         benchmark_target_value: body.benchmark_target_value,
         checkin_frequency: body.checkin_frequency ?? 'daily',

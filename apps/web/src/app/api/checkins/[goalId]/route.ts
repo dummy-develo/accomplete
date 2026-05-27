@@ -40,11 +40,11 @@ export async function POST(
     }
     const { supabase, userId } = auth;
 
-    const { data: checkin, error } = await createCheckin(supabase, goalId, userId, body);
+    const { data: checkin, error, reachedMilestones } = await createCheckin(supabase, goalId, userId, body);
 
     if (error) {
         return Response.json({ error }, { status: 400 });
     }
 
-    return Response.json({ checkin }, { status: 201 });
+    return Response.json({ checkin, reachedMilestones: reachedMilestones ?? [] }, { status: 201 });
 }

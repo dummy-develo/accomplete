@@ -1,28 +1,30 @@
-// Profile edit page — display_name only (username is set at onboarding,
-// avatars aren't supported yet). Username is still shown read-only so the
-// user has context for what they're editing.
+// Settings page — own profile editing + sign out. Username + display_name
+// are functional; the other sections in the redesign spec (Notifications,
+// Preferences, Delete account) are stubbed as "coming soon" since their
+// underlying features aren't built yet.
 "use client";
 
-import { ArrowLeft } from "@phosphor-icons/react";
+import { AppShell } from "@/components/layout/app-shell";
+import { BackLink } from "@/components/atoms/back-link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { FIELD_LIMITS } from "@/lib/constants";
+import { createClient } from "@/lib/supabase/client";
 
 type Profile = any;
 
-export default function ProfileEditPage() {
+export default function SettingsPage() {
   const router = useRouter();
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -30,23 +32,23 @@ export default function ProfileEditPage() {
         const res = await fetch("/api/profile/me");
         const json = await res.json();
         if (!res.ok || !json.profile) {
-          setError("could not load profile");
+          setSaveError("could not load profile");
           return;
         }
         setProfile(json.profile);
         setDisplayName(json.profile.display_name ?? "");
       } catch (err: any) {
-        setError(err.message);
+        setSaveError(err.message);
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSave() {
     setSaving(true);
-    setError(null);
+    setSaveError(null);
+    setSavedMessage(null);
 
     try {
       const res = await fetch("/api/profile/me", {
@@ -56,106 +58,144 @@ export default function ProfileEditPage() {
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error?.message ?? "failed to save");
+        setSaveError(json.error?.message ?? "failed to save");
         return;
       }
-      router.push(`/profile/${profile.username}`);
+      setProfile(json.profile);
+      setSavedMessage("saved");
+      window.setTimeout(() => setSavedMessage(null), 1500);
     } catch (err: any) {
-      setError(err.message);
+      setSaveError(err.message);
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading) {
-    return (
-      <main className="w-full max-w-2xl mx-auto px-4 py-6">
-        <BackLink username={null} />
-        <p className="mt-10 text-sm text-muted-foreground">loading...</p>
-      </main>
-    );
-  }
-
-  if (error && !profile) {
-    return (
-      <main className="w-full max-w-2xl mx-auto px-4 py-6">
-        <BackLink username={null} />
-        <p className="mt-10 text-sm text-red-500">{error}</p>
-      </main>
-    );
+  async function handleSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
   }
 
   const dirty = (profile?.display_name ?? "") !== displayName.trim();
 
   return (
-    <main className="w-full max-w-2xl mx-auto px-4 py-6">
-      <BackLink username={profile?.username ?? null} />
+    <AppShell>
+      <BackLink />
 
-      <h1 className="mt-6 text-2xl font-bold tracking-tight">edit profile</h1>
+      <h1 className="mt-8 text-2xl font-semibold tracking-tight">Settings</h1>
 
-      <Card className="mt-6">
-        <CardContent className="py-5">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-            <div>
-              <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                username
-              </Label>
-              <p className="mt-1 text-sm">@{profile.username}</p>
+      {loading && (
+        <p className="mt-12 text-sm text-muted-foreground">loading...</p>
+      )}
+
+      {!loading && profile && (
+        <div className="mt-10 flex flex-col gap-12 max-w-2xl">
+          <Section title="Account">
+            <Field label="username">
+              <p className="text-sm">@{profile.username}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 username can&apos;t be changed.
               </p>
-            </div>
+            </Field>
 
-            <div>
-              <Label
-                htmlFor="display_name"
-                className="text-[10px] uppercase tracking-widest text-muted-foreground"
-              >
-                display name
-              </Label>
+            <Field label="display name">
               <Input
-                id="display_name"
-                type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 maxLength={FIELD_LIMITS.displayName}
                 placeholder="how others see you"
-                className="mt-1"
               />
-            </div>
+            </Field>
 
-            {error && <p className="text-xs text-red-500">{error}</p>}
+            {saveError && (
+              <p className="text-xs text-destructive" role="alert">
+                {saveError}
+              </p>
+            )}
 
-            <div className="flex items-center gap-2">
-              <Button type="submit" disabled={saving || !dirty}>
-                {saving ? "saving..." : "save"}
+            <div className="flex items-center gap-3 pt-2">
+              <Button onClick={handleSave} disabled={saving || !dirty}>
+                {saving ? "saving..." : "Save"}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={saving}
-                onClick={() => router.push(`/profile/${profile.username}`)}
-              >
-                cancel
-              </Button>
+              {savedMessage && (
+                <span className="text-xs text-muted-foreground">
+                  {savedMessage}
+                </span>
+              )}
             </div>
-          </form>
-        </CardContent>
-      </Card>
-    </main>
+          </Section>
+
+          <Section
+            title="Notifications"
+            description="daily reminder time, milestone alerts, feed activity."
+          >
+            <ComingSoon />
+          </Section>
+
+          <Section
+            title="Preferences"
+            description="date format, week start day. theme is locked to dark."
+          >
+            <ComingSoon />
+          </Section>
+
+          <Section title="Danger zone">
+            <div className="flex flex-col gap-3">
+              <Button variant="outline" onClick={handleSignOut} className="w-fit">
+                Sign out
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                delete account: coming soon.
+              </p>
+            </div>
+          </Section>
+        </div>
+      )}
+    </AppShell>
   );
 }
 
-function BackLink({ username }: { username: string | null }) {
-  const href = username ? `/profile/${username}` : "/";
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <nav className="pb-4 border-b">
-      <Link
-        href={href}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ArrowLeft size={16} /> back to profile
-      </Link>
-    </nav>
+    <section className="flex flex-col gap-4">
+      <div>
+        <h2 className="text-sm font-semibold">{title}</h2>
+        {description && (
+          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+        )}
+      </div>
+      <div className="flex flex-col gap-5">{children}</div>
+    </section>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function ComingSoon() {
+  return (
+    <p className="text-xs text-muted-foreground italic">coming soon.</p>
   );
 }

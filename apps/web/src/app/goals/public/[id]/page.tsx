@@ -6,6 +6,8 @@
 "use client";
 
 import { ArrowLeft } from "@phosphor-icons/react";
+import { AppShell } from "@/components/layout/app-shell";
+import { BackLink } from "@/components/atoms/back-link";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -58,7 +60,7 @@ export default function PublicGoalPage() {
   }, [load]);
 
   return (
-    <main className="w-full max-w-4xl mx-auto px-4 py-6">
+    <AppShell>
       <TopBar />
 
       {loading && (
@@ -81,19 +83,14 @@ export default function PublicGoalPage() {
           />
         </>
       )}
-    </main>
+    </AppShell>
   );
 }
 
 function TopBar() {
   return (
     <nav className="flex items-center pb-4 border-b">
-      <Link
-        href="/feed"
-        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ArrowLeft size={16} /> back to feed
-      </Link>
+      <BackLink fallbackHref="/feed" />
     </nav>
   );
 }

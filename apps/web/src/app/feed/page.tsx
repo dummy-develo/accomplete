@@ -1,17 +1,19 @@
 // Feed page — Global / Following tabs of public goal cards.
-// The card body links to the read-only public goal view; the author
-// header is a separate link to their profile (siblings, since HTML
-// disallows nested anchors). Private fields arrive already stripped
-// by the API.
+//
+// The current API returns goals (one row per public goal, optionally with
+// embedded author info). The redesign envisions a true activity feed
+// (check-ins, milestones reached) — that would require a new API and
+// is deferred. For now, we restyle the goals-list view.
 "use client";
 
-import { House } from "@phosphor-icons/react";
+import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import Link from "next/link";
+import { PublicGoalCard } from "@/components/public-goal-card";
 import { useCallback, useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 
 type Tab = "global" | "following";
+type Goal = any;
 
 const PAGE_SIZE = 20;
 
@@ -35,20 +37,22 @@ export default function FeedPage() {
   const [sort, setSort] = useState("newest");
   const [status, setStatus] = useState("active");
 
-  const [goals, setGoals] = useState<any[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function urlFor(offset: number) {
-    if (tab === "global") {
-      return `/api/feed/global?sort=${sort}&status=${status}&limit=${PAGE_SIZE}&offset=${offset}`;
-    }
-    return `/api/feed/following?limit=${PAGE_SIZE}&offset=${offset}`;
-  }
+  const urlFor = useCallback(
+    (offset: number) => {
+      if (tab === "global") {
+        return `/api/feed/global?sort=${sort}&status=${status}&limit=${PAGE_SIZE}&offset=${offset}`;
+      }
+      return `/api/feed/following?limit=${PAGE_SIZE}&offset=${offset}`;
+    },
+    [tab, sort, status],
+  );
 
-  // First page — refetched whenever tab/sort/status change.
   const loadFirst = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -67,8 +71,7 @@ export default function FeedPage() {
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, sort, status]);
+  }, [urlFor]);
 
   useEffect(() => {
     loadFirst();
@@ -90,40 +93,24 @@ export default function FeedPage() {
   }
 
   return (
-    <main className="w-full max-w-2xl mx-auto px-4 py-6">
-      <nav className="flex items-center pb-4 border-b">
-        <Link
-          href="/"
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <House size={16} /> home
-        </Link>
-      </nav>
+    <AppShell>
+      <h1 className="text-2xl font-semibold tracking-tight">Feed</h1>
 
-      <h1 className="mt-6 mb-4 text-2xl font-bold tracking-tight">feed</h1>
-
-      {/* Tab toggle */}
-      <div className="flex gap-2">
+      <div className="mt-8 flex items-center gap-1">
         <TabButton active={tab === "global"} onClick={() => setTab("global")}>
-          global
+          Global
         </TabButton>
         <TabButton
           active={tab === "following"}
           onClick={() => setTab("following")}
         >
-          following
+          Following
         </TabButton>
       </div>
 
-      {/* Sort + status — global tab only */}
       {tab === "global" && (
-        <div className="mt-4 flex flex-wrap gap-3">
-          <Select
-            label="sort"
-            value={sort}
-            options={SORT_OPTIONS}
-            onChange={setSort}
-          />
+        <div className="mt-5 flex flex-wrap gap-4">
+          <Select label="sort" value={sort} options={SORT_OPTIONS} onChange={setSort} />
           <Select
             label="status"
             value={status}
@@ -133,18 +120,17 @@ export default function FeedPage() {
         </div>
       )}
 
-      {/* List */}
-      <div className="mt-6">
+      <div className="mt-10">
         {loading ? (
           <p className="text-sm text-muted-foreground">loading...</p>
         ) : error ? (
-          <p className="text-sm text-red-500">{error}</p>
+          <p className="text-sm text-destructive">{error}</p>
         ) : goals.length === 0 ? (
           <EmptyState tab={tab} />
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-6">
             {goals.map((goal) => (
-              <FeedCard key={goal.id} goal={goal} />
+              <PublicGoalCard key={goal.id} goal={goal} showAuthor />
             ))}
 
             {nextOffset !== null && (
@@ -155,13 +141,13 @@ export default function FeedPage() {
                 disabled={loadingMore}
                 onClick={loadMore}
               >
-                {loadingMore ? "loading..." : "load more"}
+                {loadingMore ? "loading..." : "Load more"}
               </Button>
             )}
           </div>
         )}
       </div>
-    </main>
+    </AppShell>
   );
 }
 
@@ -176,12 +162,14 @@ function TabButton({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+      className={cn(
+        "px-3 py-1.5 rounded-md text-sm transition-colors",
         active
-          ? "bg-foreground text-background"
-          : "text-muted-foreground hover:text-foreground"
-      }`}
+          ? "text-primary bg-accent"
+          : "text-muted-foreground hover:text-foreground hover:bg-accent",
+      )}
     >
       {children}
     </button>
@@ -205,7 +193,7 @@ function Select({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-input bg-transparent px-2 py-1 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>
@@ -219,115 +207,23 @@ function Select({
 
 function EmptyState({ tab }: { tab: Tab }) {
   return (
-    <Card>
-      <CardContent className="py-10 text-center">
-        {tab === "global" ? (
-          <p className="text-sm text-muted-foreground">
-            no public goals here yet.
+    <div className="border border-dashed border-border rounded-xl px-8 py-16 flex flex-col items-center gap-3 text-center">
+      {tab === "global" ? (
+        <>
+          <p className="text-sm text-foreground">nothing here yet.</p>
+          <p className="text-xs text-muted-foreground max-w-xs">
+            once people start sharing public goals, they&apos;ll show up here.
           </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            you&apos;re not following anyone yet. find people via{" "}
-            <Link href="/" className="underline underline-offset-4">
-              search
-            </Link>
-            .
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-foreground">no follows yet.</p>
+          <p className="text-xs text-muted-foreground max-w-xs">
+            following someone fills this feed with their public progress.
+            switch to global to see the wider activity.
           </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// Author header + goal info. Private fields are already nulled by the
-// API (stripPrivateFields), so fall back to placeholders.
-// The author link and the goal-body link are siblings, not nested —
-// HTML disallows nested <a> tags.
-function FeedCard({ goal }: { goal: any }) {
-  const author = goal.author;
-  const deadline = goal.target_completion_at
-    ? new Date(goal.target_completion_at).toLocaleDateString()
-    : "—";
-  const score = (goal.score_checkin ?? 0) + (goal.score_milestone ?? 0);
-  const streak = goal.current_streak ?? 0;
-
-  return (
-    <Card>
-      <CardContent className="py-4">
-        {/* author */}
-        {author && (
-          <Link
-            href={`/profile/${author.username}`}
-            className="flex items-center gap-2 mb-3 group w-fit"
-          >
-            <div className="w-6 h-6 rounded-full bg-muted shrink-0" />
-            <span className="text-xs font-medium group-hover:underline">
-              {author.display_name ?? author.username}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              @{author.username}
-            </span>
-          </Link>
-        )}
-
-        <Link
-          href={`/goals/public/${goal.id}`}
-          className="flex items-stretch gap-4 transition-opacity hover:opacity-80"
-        >
-          <div className="flex-1 min-w-0">
-            <div className="flex items-baseline gap-2">
-              <h3 className="font-heading text-sm font-medium truncate">
-                {goal.goal_name ?? "Private goal"}
-              </h3>
-              {goal.goal_type && (
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">
-                  {goal.goal_type}
-                </span>
-              )}
-            </div>
-
-            {goal.goal_description && (
-              <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                {goal.goal_description}
-              </p>
-            )}
-
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-muted-foreground">
-              <span>
-                target:{" "}
-                <span className="text-foreground">
-                  {goal.benchmark_target_value ?? "—"}{" "}
-                  {goal.benchmark_name ?? ""}
-                </span>
-              </span>
-              <span>
-                deadline: <span className="text-foreground">{deadline}</span>
-              </span>
-              <span>
-                status: <span className="text-foreground">{goal.status}</span>
-              </span>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-end justify-between border-l pl-4 min-w-[84px]">
-            <MiniStat label="score" value={score.toLocaleString()} />
-            <MiniStat label="streak" value={streak.toString()} />
-          </div>
-        </Link>
-      </CardContent>
-    </Card>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="text-right">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </div>
-      <div className="text-lg font-bold tabular-nums leading-none mt-0.5">
-        {value}
-      </div>
+        </>
+      )}
     </div>
   );
 }

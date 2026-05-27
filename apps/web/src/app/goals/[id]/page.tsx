@@ -1,11 +1,11 @@
 // apps/web/src/app/goals/[id]/page.tsx
 //
-// Goal detail page — read-only view of a single goal.
-// Layer 1: header, stats, meta. Check-in history, milestones, and
-// drop/complete actions come in later layers.
+// Goal detail page — deep view of a single goal.
+// Layout: sidebar + main (no right rail).
 "use client";
 
-import { House } from "@phosphor-icons/react";
+import { DotsThree } from "@phosphor-icons/react";
+import { BackLink } from "@/components/atoms/back-link";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,7 +16,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Card, CardContent } from "@/components/ui/card";
+import { AppShell } from "@/components/layout/app-shell";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,39 +26,44 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { HeroStat } from "@/components/atoms/hero-stat";
+import { CheckInDialog } from "@/components/check-in-dialog";
+import { GoalDetailTimeline } from "@/components/goal-detail/timeline";
+import { MilestonesList } from "@/components/goal-detail/milestones-list";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { FIELD_LIMITS, NUMERIC_BOUNDS, clampToBounds } from "@/lib/constants";
 
 type Goal = any;
 type Milestone = any;
 type Checkin = any;
+
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+function daysUntil(target: string | null): number {
+  if (!target) return 0;
+  const diff = new Date(target).getTime() - Date.now();
+  return Math.max(0, Math.ceil(diff / MS_PER_DAY));
+}
 
 export default function GoalDetail() {
   const params = useParams();
   const goalId = params.id as string;
 
   const [goal, setGoal] = useState<Goal | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Timeline data has its own loading state so the page header/stats can
-  // render immediately while the milestones + checkins calls are in flight.
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [checkins, setCheckins] = useState<Checkin[]>([]);
+  const [loading, setLoading] = useState(true);
   const [timelineLoading, setTimelineLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [checkInOpen, setCheckInOpen] = useState(false);
 
   const loadGoal = useCallback(async () => {
     setLoading(true);
     setError(null);
-
     try {
       const res = await fetch(`/api/goals/${goalId}`);
       const json = await res.json();
-      // The API returns { goal } on success. A missing goal (wrong id,
-      // not owned by this user, deleted) comes back as an error payload
-      // or a null goal — treat both as "not found" on this page.
       if (!res.ok || !json.goal) {
         setError("goal not found");
         return;
@@ -69,9 +76,6 @@ export default function GoalDetail() {
     }
   }, [goalId]);
 
-  // Milestones + checkins fetched together so the timeline has a single
-  // loading state. Failures here are silent — an empty timeline is a
-  // better failure mode than blocking the rest of the page.
   const loadTimeline = useCallback(async () => {
     setTimelineLoading(true);
     try {
@@ -95,135 +99,209 @@ export default function GoalDetail() {
     loadGoal();
     loadTimeline();
 
-    // Same bfcache safety net as the home page — refetch when the
-    // browser restores the page from its back-forward cache.
-    function handlePageShow(e: PageTransitionEvent) {
+    // bfcache: refresh on back-forward cache restore so the page never
+    // shows stale check-in / streak state.
+    function onPageShow(e: PageTransitionEvent) {
       if (e.persisted) {
         loadGoal();
         loadTimeline();
       }
     }
-    window.addEventListener("pageshow", handlePageShow);
-    return () => window.removeEventListener("pageshow", handlePageShow);
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
   }, [loadGoal, loadTimeline]);
 
   return (
-    <main className="w-full max-w-4xl mx-auto px-4 py-6">
-      <TopBar />
+    <AppShell>
+      <BackLink />
 
       {loading && (
-        <p className="mt-10 text-sm text-muted-foreground">loading...</p>
+        <p className="mt-12 text-sm text-muted-foreground">loading...</p>
       )}
-
       {error && <NotFound message={error} />}
 
       {!loading && !error && goal && (
         <>
-          <GoalHeader goal={goal} goalId={goalId} loadGoal={loadGoal} />
-          <StatsBar goal={goal} />
-          <MetaInfo goal={goal} />
+          <GoalHeader goal={goal} goalId={goalId} reloadGoal={loadGoal} />
+          <StatsRow goal={goal} checkinCount={checkins.length} />
+
           {goal.status === "active" && (
-            <CheckInForm
-              goalId={goalId}
-              benchmarkName={goal.benchmark_name}
-              onCheckinCreated={() => { loadGoal(); loadTimeline(); }}
-            />
+            <section className="mt-10">
+              <Button size="lg" onClick={() => setCheckInOpen(true)}>
+                Check in for today
+              </Button>
+            </section>
           )}
-          <TimelineSection
-            goal={goal}
-            milestones={milestones}
-            checkins={checkins}
-            loading={timelineLoading}
-          />
+
+          <section className="mt-14">
+            <SectionHeader>Timeline</SectionHeader>
+            {timelineLoading ? (
+              <p className="text-sm text-muted-foreground">
+                loading timeline...
+              </p>
+            ) : (
+              <GoalDetailTimeline
+                goal={goal}
+                milestones={milestones}
+                checkins={checkins}
+              />
+            )}
+          </section>
+
+          <section className="mt-14">
+            <SectionHeader>Milestones</SectionHeader>
+            {timelineLoading ? (
+              <p className="text-sm text-muted-foreground">
+                loading milestones...
+              </p>
+            ) : (
+              <MilestonesList milestones={milestones} />
+            )}
+          </section>
         </>
       )}
-    </main>
+
+      <CheckInDialog
+        open={checkInOpen}
+        onOpenChange={setCheckInOpen}
+        goal={goal}
+        onSuccess={() => {
+          loadGoal();
+          loadTimeline();
+        }}
+      />
+    </AppShell>
   );
 }
 
-function TopBar() {
-  return (
-    <nav className="flex items-center pb-4 border-b">
-      <Link
-        href="/"
-        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <House size={16} /> home
-      </Link>
-    </nav>
-  );
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return <h2 className="text-sm font-semibold mb-5">{children}</h2>;
 }
 
-// Inline fallback shown when the goal can't be loaded. Keeping this in
-// the same file on purpose — simple enough that a dedicated not-found.tsx
-// would be overkill right now.
 function NotFound({ message }: { message: string }) {
   return (
-    <Card className="mt-10">
-      <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
-        <p className="text-sm text-muted-foreground">{message}</p>
-        <p className="text-xs text-muted-foreground">
-          the goal you're looking for doesn't exist or isn't accessible.
-        </p>
-        <Link href="/" className="mt-2 flex items-center gap-1.5 text-xs underline underline-offset-4">
-          <House size={14} /> home
-        </Link>
-      </CardContent>
-    </Card>
+    <div className="mt-16 flex flex-col items-center gap-3 text-center">
+      <p className="text-sm">{message}</p>
+      <p className="text-xs text-muted-foreground">
+        the goal you&apos;re looking for doesn&apos;t exist or isn&apos;t
+        accessible.
+      </p>
+      <Button asChild size="sm" className="mt-2">
+        <Link href="/">Back to Today</Link>
+      </Button>
+    </div>
   );
 }
 
 function GoalHeader({
   goal,
   goalId,
-  loadGoal,
+  reloadGoal,
 }: {
   goal: Goal;
   goalId: string;
-  loadGoal: () => Promise<void>;
+  reloadGoal: () => Promise<void>;
 }) {
+  const category: string | null = goal.category ?? null;
+  const target =
+    goal.benchmark_target_value != null && goal.benchmark_name
+      ? `${goal.benchmark_target_value} ${goal.benchmark_name}`
+      : null;
+
   return (
-    <section className="mt-8">
-      <div className="flex items-start justify-between gap-3">
+    <header className="mt-8">
+      <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold tracking-tight break-words min-w-0">
-              {goal.goal_name}
-            </h1>
-            {goal.goal_type && (
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground break-words min-w-0">
-                {goal.goal_type}
-              </span>
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            {category && (
+              <Badge variant="outline" className="font-normal">
+                {category}
+              </Badge>
             )}
+            <StatusPill status={goal.status} />
           </div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground break-words">
+            {goal.goal_name}
+          </h1>
+          {target && (
+            <p className="mt-1 font-mono text-xs text-muted-foreground tabular-nums">
+              target {target}
+            </p>
+          )}
           {goal.goal_description && (
             <p className="mt-2 text-sm text-muted-foreground break-words whitespace-pre-wrap">
               {goal.goal_description}
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <StatusBadge status={goal.status} />
-          {goal.status === "active" && (
-            <GoalActions goalId={goalId} goal={goal} loadGoal={loadGoal} />
-          )}
-        </div>
+        {goal.status === "active" && (
+          <GoalActions goalId={goalId} goal={goal} reloadGoal={reloadGoal} />
+        )}
       </div>
+    </header>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  if (status === "completed") {
+    return (
+      <Badge variant="secondary" className="font-normal">
+        completed
+      </Badge>
+    );
+  }
+  if (status === "dropped") {
+    return (
+      <Badge variant="outline" className="font-normal text-muted-foreground">
+        dropped
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="font-normal">
+      active
+    </Badge>
+  );
+}
+
+function StatsRow({
+  goal,
+  checkinCount,
+}: {
+  goal: Goal;
+  checkinCount: number;
+}) {
+  const points =
+    (goal.score_checkin ?? 0) +
+    (goal.score_milestone ?? 0) +
+    (goal.score_completion ?? 0);
+  const currentStreak = goal.current_streak ?? 0;
+  const bestStreak = goal.best_streak ?? 0;
+
+  // "Days left" only makes sense on an active goal. For completed/dropped,
+  // show a dash — the deadline is no longer relevant.
+  const daysLeft =
+    goal.status === "active" ? `${daysUntil(goal.target_completion_at)}d` : "—";
+
+  return (
+    <section className="mt-10 grid grid-cols-2 md:grid-cols-5 gap-8">
+      <HeroStat label="Check-ins" value={checkinCount} />
+      <HeroStat label="Current streak" value={currentStreak} />
+      <HeroStat label="Best streak" value={bestStreak} />
+      <HeroStat label="Points" value={points.toLocaleString()} />
+      <HeroStat label="Days left" value={daysLeft} />
     </section>
   );
 }
 
-// Goal actions dropdown — complete, drop, or navigate to edit pages.
-// Only rendered for active goals. Each destructive action opens a
-// confirmation dialog before hitting the API.
 function GoalActions({
   goalId,
   goal,
-  loadGoal,
+  reloadGoal,
 }: {
   goalId: string;
   goal: Goal;
-  loadGoal: () => Promise<void>;
+  reloadGoal: () => Promise<void>;
 }) {
   const router = useRouter();
   const [completeOpen, setCompleteOpen] = useState(false);
@@ -236,7 +314,7 @@ function GoalActions({
       const res = await fetch(`/api/goals/${goalId}/complete`, {
         method: "POST",
       });
-      if (res.ok) await loadGoal();
+      if (res.ok) await reloadGoal();
     } finally {
       setSubmitting(false);
       setCompleteOpen(false);
@@ -246,17 +324,14 @@ function GoalActions({
   async function handleDrop() {
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/goals/${goalId}/drop`, {
-        method: "POST",
-      });
-      if (res.ok) await loadGoal();
+      const res = await fetch(`/api/goals/${goalId}/drop`, { method: "POST" });
+      if (res.ok) await reloadGoal();
     } finally {
       setSubmitting(false);
       setDropOpen(false);
     }
   }
 
-  // Pre-compute the completion bonus for the dialog description
   const totalGoalScore =
     (goal.score_checkin ?? 0) + (goal.score_milestone ?? 0);
   const completionBonus = 5 * totalGoalScore;
@@ -265,37 +340,37 @@ function GoalActions({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button
+          <Button
             type="button"
-            className="flex items-center justify-center h-7 w-7 rounded-md border text-muted-foreground hover:text-foreground hover:border-foreground transition-colors"
+            variant="outline"
+            size="icon"
             aria-label="Goal actions"
           >
-            ⋯
-          </button>
+            <DotsThree size={16} weight="bold" />
+          </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align="end" className="w-44">
           <DropdownMenuItem onClick={() => router.push(`/goals/${goalId}/edit`)}>
-            edit goal
+            Edit goal
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => router.push(`/goals/${goalId}/edit?tab=privacy`)}
           >
-            edit privacy
+            Edit privacy
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setCompleteOpen(true)}>
-            mark as complete
+            Mark as complete
           </DropdownMenuItem>
           <DropdownMenuItem
-            className="text-red-500 focus:text-red-500"
+            className="text-destructive focus:text-destructive"
             onClick={() => setDropOpen(true)}
           >
-            drop goal
+            Drop goal
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Complete goal confirmation */}
       <AlertDialog open={completeOpen} onOpenChange={setCompleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -315,7 +390,6 @@ function GoalActions({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Drop goal confirmation */}
       <AlertDialog open={dropOpen} onOpenChange={setDropOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -330,7 +404,7 @@ function GoalActions({
             <AlertDialogAction
               onClick={handleDrop}
               disabled={submitting}
-              className="bg-red-500 hover:bg-red-600 text-white"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {submitting ? "dropping..." : "drop"}
             </AlertDialogAction>
@@ -341,429 +415,3 @@ function GoalActions({
   );
 }
 
-// Monochrome status badge — keeps the theme consistent by using fill/weight
-// instead of color. Completed inverts (filled), dropped dims, active is neutral.
-function StatusBadge({ status }: { status: string }) {
-  const classes =
-    status === "completed"
-      ? "bg-foreground text-background border-foreground"
-      : status === "dropped"
-      ? "border-muted-foreground text-muted-foreground"
-      : "border-foreground text-foreground";
-  return (
-    <span
-      className={`text-[10px] uppercase tracking-widest border px-2 py-1 shrink-0 ${classes}`}
-    >
-      {status}
-    </span>
-  );
-}
-
-function StatsBar({ goal }: { goal: Goal }) {
-  // Total goal score is check-in points + milestone bonuses + completion bonus.
-  const score =
-    (goal.score_checkin ?? 0) +
-    (goal.score_milestone ?? 0) +
-    (goal.score_completion ?? 0);
-  const currentStreak = goal.current_streak ?? 0;
-  const bestStreak = goal.best_streak ?? 0;
-
-  return (
-    <div className="grid grid-cols-3 gap-3 mt-8">
-      <StatCell label="score" value={score} />
-      <StatCell label="current streak" value={currentStreak} />
-      <StatCell label="best streak" value={bestStreak} />
-    </div>
-  );
-}
-
-function StatCell({ label, value }: { label: string; value: number }) {
-  return (
-    <Card>
-      <CardContent className="flex flex-col items-start gap-1 py-2">
-        <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-          {label}
-        </span>
-        <span className="text-4xl font-bold tabular-nums leading-none">
-          {value.toLocaleString()}
-        </span>
-      </CardContent>
-    </Card>
-  );
-}
-
-function MetaInfo({ goal }: { goal: Goal }) {
-  const deadline = goal.target_completion_at
-    ? new Date(goal.target_completion_at).toLocaleDateString()
-    : "—";
-
-  const target = `${goal.benchmark_target_value ?? "—"} ${
-    goal.benchmark_name ?? ""
-  }`.trim();
-
-  return (
-    <section className="mt-10">
-      <h2 className="text-xs uppercase tracking-widest text-muted-foreground mb-3">
-        details
-      </h2>
-      <Card>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4">
-          <MetaItem label="target" value={target} />
-          <MetaItem label="deadline" value={deadline} />
-        </CardContent>
-      </Card>
-    </section>
-  );
-}
-
-function MetaItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
-        {label}
-      </div>
-      <div className="text-sm mt-1">{value}</div>
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------------
-// Check-in form
-// ----------------------------------------------------------------------
-
-function CheckInForm({
-  goalId,
-  benchmarkName,
-  onCheckinCreated,
-}: {
-  goalId: string;
-  benchmarkName: string | null;
-  onCheckinCreated: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [metricValue, setMetricValue] = useState("");
-  const [notes, setNotes] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-
-    try {
-      const res = await fetch(`/api/checkins/${goalId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          metric_value: metricValue ? Number(clampToBounds(metricValue)) : null,
-          notes: notes.trim() || null,
-        }),
-      });
-
-      if (!res.ok) {
-        const json = await res.json();
-        setError(json.error ?? "failed to check in");
-        return;
-      }
-
-      // Reset form, close it, and refresh the timeline
-      setMetricValue("");
-      setNotes("");
-      setOpen(false);
-      onCheckinCreated();
-    } catch {
-      setError("something went wrong");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <section className="mt-10">
-      {!open ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="w-full border border-dashed border-muted-foreground/40 rounded-lg py-3 text-sm text-muted-foreground hover:text-foreground hover:border-foreground transition-colors"
-        >
-          + check in
-        </button>
-      ) : (
-        <Card>
-          <CardContent className="py-4">
-            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-              <div>
-                <label className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                  {benchmarkName ?? "value"}
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  min={NUMERIC_BOUNDS.min}
-                  max={NUMERIC_BOUNDS.max}
-                  value={metricValue}
-                  onChange={(e) => setMetricValue(e.target.value)}
-                  onBlur={(e) => setMetricValue(clampToBounds(e.target.value))}
-                  placeholder="0"
-                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                  notes
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={2}
-                  maxLength={FIELD_LIMITS.checkinNotes}
-                  placeholder="optional"
-                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
-                />
-              </div>
-
-              {error && (
-                <p className="text-xs text-red-500">{error}</p>
-              )}
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="rounded-md bg-foreground text-background px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-                >
-                  {submitting ? "saving..." : "submit"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpen(false);
-                    setError(null);
-                  }}
-                  className="rounded-md border px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  cancel
-                </button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-    </section>
-  );
-}
-
-// ----------------------------------------------------------------------
-// Timeline
-// ----------------------------------------------------------------------
-
-type TimelineItem = {
-  kind: "checkin" | "milestone-reached" | "milestone-pending" | "goal-end";
-  timestamp: string | null;
-  data: any;
-};
-
-function TimelineSection({
-  goal,
-  milestones,
-  checkins,
-  loading,
-}: {
-  goal: Goal;
-  milestones: Milestone[];
-  checkins: Checkin[];
-  loading: boolean;
-}) {
-  // Collapsible "dropdown" — default open so the user sees everything on
-  // first load. State is section-local because toggling has no side effects.
-  const [expanded, setExpanded] = useState(true);
-
-  // Build two sorted buckets out of the raw arrays:
-  //   past     — check-ins + reached milestones, oldest → newest
-  //   upcoming — pending milestones, earliest → latest
-  // The goal-end marker is appended separately after upcoming so it's
-  // always the very last row.
-  const { past, upcoming } = buildTimeline(checkins, milestones);
-
-  return (
-    <section className="mt-10">
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="flex items-center gap-2 mb-3 text-xs uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <span>{expanded ? "▾" : "▸"}</span>
-        <span>timeline</span>
-      </button>
-
-      {expanded && (
-        <Card>
-          <CardContent className="py-4">
-            {loading ? (
-              <p className="text-sm text-muted-foreground">
-                loading timeline...
-              </p>
-            ) : past.length === 0 &&
-              upcoming.length === 0 &&
-              !goal.target_completion_at ? (
-              <p className="text-sm text-muted-foreground">nothing yet.</p>
-            ) : (
-              <ol className="flex flex-col">
-                {past.map((item, i) => (
-                  <TimelineRow key={`past-${i}`} item={item} dimmed={false} benchmarkName={goal.benchmark_name} />
-                ))}
-                {upcoming.map((item, i) => (
-                  <TimelineRow key={`up-${i}`} item={item} dimmed={true} benchmarkName={goal.benchmark_name} />
-                ))}
-                {/* Goal end is always last. Dimmed unless the goal is
-                    actually completed — an active or dropped goal hasn't
-                    reached its finish line yet. */}
-                <TimelineRow
-                  item={{
-                    kind: "goal-end",
-                    timestamp: goal.target_completion_at ?? null,
-                    data: goal,
-                  }}
-                  dimmed={goal.status !== "completed"}
-                />
-              </ol>
-            )}
-          </CardContent>
-        </Card>
-      )}
-    </section>
-  );
-}
-
-function buildTimeline(checkins: Checkin[], milestones: Milestone[]) {
-  const past: TimelineItem[] = [];
-  const upcoming: TimelineItem[] = [];
-
-  for (const c of checkins) {
-    past.push({ kind: "checkin", timestamp: c.created_at, data: c });
-  }
-
-  for (const m of milestones) {
-    if (m.reached_at) {
-      past.push({
-        kind: "milestone-reached",
-        timestamp: m.reached_at,
-        data: m,
-      });
-    } else {
-      upcoming.push({
-        kind: "milestone-pending",
-        timestamp: m.target_date,
-        data: m,
-      });
-    }
-  }
-
-  const byTime = (a: TimelineItem, b: TimelineItem) =>
-    new Date(a.timestamp ?? 0).getTime() -
-    new Date(b.timestamp ?? 0).getTime();
-
-  past.sort(byTime);
-  upcoming.sort(byTime);
-
-  return { past, upcoming };
-}
-
-function TimelineRow({
-  item,
-  dimmed,
-  benchmarkName,
-}: {
-  item: TimelineItem;
-  dimmed: boolean;
-  benchmarkName?: string | null;
-}) {
-  const date = item.timestamp
-    ? new Date(item.timestamp).toLocaleDateString()
-    : "—";
-
-  let marker: React.ReactNode;
-  let label: string;
-  let details: React.ReactNode = null;
-
-  if (item.kind === "checkin") {
-    marker = <Dot filled size="sm" />;
-    label = "check-in";
-    details = (
-      <>
-        {item.data.metric_value != null && (
-          <span className="text-xs text-muted-foreground">
-            {benchmarkName ?? "value"}: {item.data.metric_value}
-          </span>
-        )}
-        {item.data.notes && (
-          <p className="mt-0.5 text-xs text-muted-foreground break-words whitespace-pre-wrap">
-            {item.data.notes}
-          </p>
-        )}
-      </>
-    );
-  } else if (item.kind === "milestone-reached") {
-    marker = <Dot filled size="md" />;
-    label = `milestone ${item.data.order_index ?? ""} reached`.trim();
-    if (item.data.message) {
-      details = (
-        <p className="mt-0.5 text-xs italic text-muted-foreground break-words whitespace-pre-wrap">
-          &ldquo;{item.data.message}&rdquo;
-        </p>
-      );
-    }
-  } else if (item.kind === "milestone-pending") {
-    marker = <Dot size="md" />;
-    label = `milestone ${item.data.order_index ?? ""}`.trim();
-    if (item.data.message) {
-      details = (
-        <p className="mt-0.5 text-xs italic text-muted-foreground break-words whitespace-pre-wrap">
-          &ldquo;{item.data.message}&rdquo;
-        </p>
-      );
-    }
-  } else {
-    // goal-end
-    marker = <GoalEndMark />;
-    label = "goal end";
-  }
-
-  return (
-    <li
-      className={`flex items-start gap-3 py-2 ${dimmed ? "opacity-40" : ""}`}
-    >
-      <div className="flex items-center justify-center shrink-0 w-4 pt-1.5">
-        {marker}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="text-sm">{label}</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            {date}
-          </span>
-        </div>
-        {details}
-      </div>
-    </li>
-  );
-}
-
-function Dot({
-  filled = false,
-  size = "md",
-}: {
-  filled?: boolean;
-  size?: "sm" | "md";
-}) {
-  const dim = size === "sm" ? "h-1.5 w-1.5" : "h-2.5 w-2.5";
-  const fill = filled ? "bg-foreground" : "border border-foreground";
-  return <div className={`${dim} ${fill} rounded-full`} />;
-}
-
-function GoalEndMark() {
-  return (
-    <span className="text-sm font-bold leading-none select-none">×</span>
-  );
-}

@@ -3,11 +3,11 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { FIELD_LIMITS, validateUsername } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 
 // idle    — field empty, nothing to show
 // checking — valid format, availability query in flight (debounced)
@@ -22,7 +22,7 @@ type UsernameStatus =
   | "invalid";
 
 export default function Onboarding() {
-  // createClient() returns a new client each call, so memoize it — otherwise
+  // createClient() returns a new client each call, so memoize — otherwise
   // the username-check effect below would re-run on every render.
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
@@ -111,95 +111,93 @@ export default function Onboarding() {
 
   const borderClass =
     status === "available"
-      ? "border-green-500"
+      ? "border-primary"
       : status === "invalid" || status === "taken"
-      ? "border-red-500"
-      : "";
+        ? "border-destructive"
+        : "";
 
   const messageClass =
     status === "available"
-      ? "text-green-600"
+      ? "text-primary"
       : status === "invalid" || status === "taken"
-      ? "text-red-500"
-      : "text-muted-foreground";
+        ? "text-destructive"
+        : "text-muted-foreground";
 
   return (
     <main className="flex-1 flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
-        <header className="mb-8 text-center">
-          <h1 className="text-2xl font-bold tracking-tight">
-            set up your profile
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            pick a username and display name to get started
+      <div className="w-full max-w-[400px]">
+        <header className="mb-10 text-center">
+          <h1 className="font-mono text-sm tracking-[0.18em]">ACCOMPLETE</h1>
+          <p className="mt-6 text-xl">Set up your profile</p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            pick a username and a display name.
           </p>
         </header>
 
-        <Card>
-          <CardContent className="py-6">
-            <div className="flex flex-col gap-5">
-              <div className="flex flex-col gap-1.5">
-                <Label
-                  htmlFor="displayName"
-                  className="text-xs uppercase tracking-widest"
-                >
-                  display name
-                </Label>
-                <Input
-                  id="displayName"
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  maxLength={FIELD_LIMITS.displayName}
-                  placeholder="how your name appears to others"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label
-                  htmlFor="username"
-                  className="text-xs uppercase tracking-widest"
-                >
-                  username
-                </Label>
-                <Input
-                  id="username"
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  maxLength={FIELD_LIMITS.username}
-                  placeholder="3–10 letters and numbers"
-                  className={borderClass}
-                />
-                {message && (
-                  <p className={`text-xs ${messageClass}`}>{message}</p>
-                )}
-              </div>
-
-              {saveError && (
-                <p className="text-sm text-red-500" role="alert">
-                  {saveError}
-                </p>
-              )}
-
-              {/*
-                suppressHydrationWarning: browsers (Firefox especially)
-                restore a button's `disabled` state from session history
-                before React hydrates, so the live DOM differs from the
-                server HTML. React still controls the button after hydration.
-              */}
-              <Button
-                type="button"
-                disabled={status !== "available" || saving}
-                onClick={saveProfile}
-                className="mt-1"
-                suppressHydrationWarning
+        <div className="bg-card border border-border rounded-xl p-6">
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-1.5">
+              <Label
+                htmlFor="displayName"
+                className="text-xs text-muted-foreground"
               >
-                {saving ? "saving..." : "save & continue"}
-              </Button>
+                display name
+              </Label>
+              <Input
+                id="displayName"
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                maxLength={FIELD_LIMITS.displayName}
+                placeholder="how your name appears to others"
+                autoFocus
+              />
             </div>
-          </CardContent>
-        </Card>
+
+            <div className="flex flex-col gap-1.5">
+              <Label
+                htmlFor="username"
+                className="text-xs text-muted-foreground"
+              >
+                username
+              </Label>
+              <Input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                maxLength={FIELD_LIMITS.username}
+                placeholder="3–10 letters and numbers"
+                className={cn(borderClass)}
+              />
+              {message && (
+                <p className={`text-xs ${messageClass}`}>{message}</p>
+              )}
+            </div>
+
+            {saveError && (
+              <p className="text-xs text-destructive" role="alert">
+                {saveError}
+              </p>
+            )}
+
+            {/*
+              suppressHydrationWarning: browsers (Firefox especially) restore
+              a button's `disabled` state from session history before React
+              hydrates, so the live DOM differs from the server HTML. React
+              still controls the button after hydration.
+            */}
+            <Button
+              type="button"
+              disabled={status !== "available" || saving}
+              onClick={saveProfile}
+              className="mt-1 w-full"
+              suppressHydrationWarning
+            >
+              {saving ? "saving..." : "Continue"}
+            </Button>
+          </div>
+        </div>
       </div>
     </main>
   );
