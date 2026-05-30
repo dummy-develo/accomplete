@@ -13,6 +13,14 @@ import { CheckInDialog } from "@/components/check-in-dialog";
 import { TodayGoalCard } from "@/components/today/goal-card";
 import { TodayRightRail } from "@/components/today/right-rail";
 import { todayInTimezone } from "@/lib/client-date";
+import {
+  Sun,
+  SunDim,
+  CloudMoon,
+  Moon,
+  MoonStars,
+  type Icon,
+} from "@phosphor-icons/react";
 
 // Placeholder aliases — swap for real types from packages/shared later.
 type Profile = any;
@@ -30,13 +38,19 @@ function formatMonoDate(date: Date = new Date()): string {
   return `${weekday} · ${rest}`;
 }
 
-function greetingFor(date: Date): string {
+// Greeting paired with a time-of-day icon and a CSS-var tone. Keeping all
+// three in one function means the icon, label, and color always agree on
+// the same period boundary — no chance of saying "good morning" with a moon
+// icon if someone tweaks one and forgets the other.
+type Greeting = { label: string; Icon: Icon; tone: string };
+
+function greetingFor(date: Date): Greeting {
   const h = date.getHours();
-  if (h < 5) return "still up";
-  if (h < 12) return "good morning";
-  if (h < 17) return "good afternoon";
-  if (h < 22) return "good evening";
-  return "night owl";
+  if (h < 5) return { label: "still up", Icon: MoonStars, tone: "var(--tone-night)" };
+  if (h < 12) return { label: "good morning", Icon: Sun, tone: "var(--tone-morning)" };
+  if (h < 17) return { label: "good afternoon", Icon: SunDim, tone: "var(--tone-afternoon)" };
+  if (h < 22) return { label: "good evening", Icon: CloudMoon, tone: "var(--tone-evening)" };
+  return { label: "night owl", Icon: Moon, tone: "var(--tone-night)" };
 }
 
 export default function Home() {
@@ -107,9 +121,17 @@ export default function Home() {
       }
     >
       <div className="flex items-baseline justify-between">
-        <h1 className="text-sm text-muted-foreground">
-          {greeting}
-          {firstName ? `, ${firstName.toLowerCase()}` : ""}
+        <h1 className="text-sm text-muted-foreground inline-flex items-center gap-2">
+          <greeting.Icon
+            size={14}
+            weight="fill"
+            style={{ color: greeting.tone }}
+            aria-hidden
+          />
+          <span>
+            {greeting.label}
+            {firstName ? `, ${firstName.toLowerCase()}` : ""}
+          </span>
         </h1>
         <span className="font-mono text-xs text-muted-foreground">
           {monoDate}

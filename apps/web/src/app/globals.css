@@ -125,6 +125,20 @@
   --nav-link-active-color: oklch(0.95 0.005 60);
   --nav-link-active-weight: 700;
   --nav-link-size: 0.875rem;
+
+  /* Status dots — only colors in the app outside --brand. Kept muted so they
+     read as semantic accents, not decoration. Green for "done", amber for
+     "needs attention". No red for pending — red is for errors. */
+  --status-success: oklch(0.72 0.14 150);
+  --status-pending: oklch(0.78 0.13 78);
+
+  /* Greeting tone-of-day. A single muted accent per period; keeps the page
+     from feeling beige without going rainbow. Used only on the small icon
+     next to "good morning / afternoon / ..." on Today. */
+  --tone-morning: oklch(0.82 0.12 80);
+  --tone-afternoon: oklch(0.74 0.13 55);
+  --tone-evening: oklch(0.72 0.10 25);
+  --tone-night: oklch(0.70 0.08 260);
 }
 
 @layer base {
