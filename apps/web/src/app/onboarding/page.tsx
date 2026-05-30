@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { FIELD_LIMITS, validateUsername } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -26,7 +25,6 @@ export default function Onboarding() {
   // createClient() returns a new client each call, so memoize — otherwise
   // the username-check effect below would re-run on every render.
   const supabase = useMemo(() => createClient(), []);
-  const router = useRouter();
 
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
@@ -105,7 +103,11 @@ export default function Onboarding() {
         return;
       }
 
-      router.push("/");
+      // Hard navigation, not router.push: setting the username changes what
+      // middleware allows. A client-side push would replay the cached "/"
+      // → /onboarding redirect from before the username existed, trapping
+      // the user here. A full load re-runs middleware with fresh state.
+      window.location.href = "/";
     } catch {
       setSaveError("something went wrong");
     } finally {

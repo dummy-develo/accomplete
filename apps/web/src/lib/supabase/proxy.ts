@@ -72,6 +72,18 @@ export async function updateSession(request: NextRequest) {
       url.pathname = '/onboarding'
       return NextResponse.redirect(url)
     }
+
+    // Already signed in with a profile set up — the auth pages have nothing
+    // left to offer, so send them home instead of showing a login/signup form
+    // over a live session.
+    if (
+      request.nextUrl.pathname.startsWith('/login') ||
+      request.nextUrl.pathname.startsWith('/signup')
+    ) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/'
+      return NextResponse.redirect(url)
+    }
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're

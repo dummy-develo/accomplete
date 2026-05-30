@@ -13,14 +13,20 @@ export default function Login() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // When a login fails because the email isn't confirmed, surface a resend
+  // option instead of a dead-end error. Holds the email to resend to.
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState("");
+  const [resendStatus, setResendStatus] = useState("");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
+    setUnconfirmedEmail("");
+    setResendStatus("");
     setSubmitting(true);
 
     const form = e.currentTarget;
-    const email = form.email.value;
+    const email = form.email.value.trim();
     const password = form.password.value;
 
     const { error } = await supabase.auth.signInWithPassword({
@@ -29,11 +35,26 @@ export default function Login() {
     });
 
     if (error) {
-      setError(error.message);
+      if (error.message.toLowerCase().includes("email not confirmed")) {
+        setUnconfirmedEmail(email);
+      } else {
+        setError(error.message);
+      }
       setSubmitting(false);
     } else {
+      // Middleware routes to /onboarding if no username is set yet.
       router.push("/");
     }
+  }
+
+  async function handleResend() {
+    setResendStatus("");
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: unconfirmedEmail,
+    });
+    // Supabase rate-limits resends (~60s); show that rather than failing silently.
+    setResendStatus(error ? error.message : "sent — check your inbox");
   }
 
   return (
@@ -60,18 +81,33 @@ export default function Login() {
               >
                 password
               </Label>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                required
-              />
+              <Input id="password" name="password" type="password" required />
             </div>
 
             {error && (
               <p className="text-xs text-destructive" role="alert">
                 {error}
               </p>
+            )}
+
+            {unconfirmedEmail && (
+              <div className="flex flex-col gap-1.5" role="alert">
+                <p className="text-xs text-destructive">
+                  please verify your email before signing in.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  className="self-start text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors"
+                >
+                  resend verification email
+                </button>
+                {resendStatus && (
+                  <p className="text-xs text-muted-foreground" role="status">
+                    {resendStatus}
+                  </p>
+                )}
+              </div>
             )}
 
             <Button type="submit" disabled={submitting} className="mt-2 w-full">

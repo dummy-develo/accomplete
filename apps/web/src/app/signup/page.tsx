@@ -54,13 +54,19 @@ export default function Signup() {
       return;
     }
 
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({ email, password });
 
     if (error) {
       setError(error.message);
       setSubmitting(false);
-    } else {
+    } else if (data.session) {
+      // Verification off (dev/test): signUp returns a live session, so the
+      // user can go straight to onboarding.
       router.push("/onboarding");
+    } else {
+      // Verification on (prod): no session yet — Supabase sent a confirmation
+      // email and the user lands here only after clicking the link.
+      router.push(`/auth/verify-email?email=${encodeURIComponent(email)}`);
     }
   }
 
