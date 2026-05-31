@@ -7,11 +7,15 @@ export async function verifyUser(
 ){
     const token = request.headers.get('Authorization')?.replace('Bearer ', '');
     const supabase = token ? createClientFromToken(token) : await createClient();
-    const { data: { user } , error } = await supabase.auth.getUser();
+    // getClaims() verifies the JWT signature locally (no network round-trip to
+    // the Auth server) once the project uses asymmetric JWT signing keys. The
+    // user id lives in the `sub` claim. Mirrors what proxy.ts already does.
+    const { data, error } = await supabase.auth.getClaims();
+    const claims = data?.claims;
 
-    if(error || !user){
+    if(error || !claims){
         console.log(error);
         return null;
     }
-    return { supabase, userId : user.id };
+    return { supabase, userId : claims.sub };
 }

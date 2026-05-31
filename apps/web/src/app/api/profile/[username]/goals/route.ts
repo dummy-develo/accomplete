@@ -25,14 +25,17 @@ export async function GET(
         return Response.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Check if the requesting user is the profile owner
-    const { data: { user } } = await supabase.auth.getUser();
-    const isOwner = user?.id === profile.id;
+    // Check if the requesting user is the profile owner. getClaims() verifies
+    // the JWT locally (no Auth-server round-trip) with asymmetric signing keys;
+    // the user id is the `sub` claim.
+    const { data: claimsData } = await supabase.auth.getClaims();
+    const userId = claimsData?.claims?.sub ?? null;
+    const isOwner = userId === profile.id;
 
     // Standard-block: if the profile owner has blocked the viewer, they see
     // none of the owner's goals. (isBlockedByThem = owner → viewer row.)
-    if (user && !isOwner) {
-        const { data: rel } = await getRelationState(supabase, user.id, profile.id);
+    if (userId && !isOwner) {
+        const { data: rel } = await getRelationState(supabase, userId, profile.id);
         if (rel.isBlockedByThem) {
             return Response.json({ goals: [] });
         }
