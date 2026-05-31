@@ -82,7 +82,10 @@ export default function Signup() {
         </header>
 
         <div className="bg-card border border-border rounded-xl p-6">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {/* method="post" is a safety net: if the form is ever submitted
+              before JS hydrates, the browser POSTs (credentials in the body)
+              instead of falling back to a GET with the password in the URL. */}
+          <form method="post" onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="email" className="text-xs text-muted-foreground">
                 email

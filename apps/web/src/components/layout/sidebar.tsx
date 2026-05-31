@@ -41,7 +41,13 @@ type SidebarProfile = {
   username: string | null;
 };
 
-export function Sidebar() {
+type SidebarProps = {
+  // Called whenever the user taps something that navigates away. The mobile
+  // drawer uses this to close itself; on desktop it's omitted (no-op).
+  onNavigate?: () => void;
+};
+
+export function Sidebar({ onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [profile, setProfile] = useState<SidebarProfile | null>(null);
@@ -61,6 +67,7 @@ export function Sidebar() {
   }, []);
 
   async function handleSignOut() {
+    onNavigate?.();
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");
@@ -92,6 +99,7 @@ export function Sidebar() {
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  onClick={onNavigate}
                   className={cn("nav-link", active && "is-active")}
                 >
                   <Icon size={16} weight={active ? "fill" : "regular"} />
@@ -121,13 +129,16 @@ export function Sidebar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="w-52">
             <DropdownMenuItem asChild disabled={!profile?.username}>
-              <Link href={profile?.username ? `/profile/${profile.username}` : "#"}>
+              <Link
+                href={profile?.username ? `/profile/${profile.username}` : "#"}
+                onClick={onNavigate}
+              >
                 <User size={14} className="mr-2" />
                 View profile
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/profile/edit">
+              <Link href="/profile/edit" onClick={onNavigate}>
                 <Gear size={14} className="mr-2" />
                 Settings
               </Link>
