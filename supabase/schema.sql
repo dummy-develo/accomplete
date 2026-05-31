@@ -249,9 +249,17 @@ create trigger on_auth_user_created
 -- ============================================
 -- Applies +/- deltas to both endpoints when is_following flips. Block toggles
 -- do not affect counts. (No backfill here — fresh DB starts at 0.)
-
+--
+-- security definer (+ pinned search_path) is REQUIRED: the function updates the
+-- followee's profile row (destination_id), which the calling `authenticated`
+-- user does not own. Without it, the profiles UPDATE RLS policy silently blocks
+-- that write and followers_count never moves. [011]
 create or replace function sync_follower_counts()
-returns trigger as $$
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
 declare
   was_following boolean := false;
   is_following_now boolean := false;
@@ -270,18 +278,18 @@ begin
   end if;
 
   if was_following then
-    update profiles set following_count = greatest(0, following_count - 1) where id = old.source_id;
-    update profiles set followers_count = greatest(0, followers_count - 1) where id = old.destination_id;
+    update public.profiles set following_count = greatest(0, following_count - 1) where id = old.source_id;
+    update public.profiles set followers_count = greatest(0, followers_count - 1) where id = old.destination_id;
   end if;
 
   if is_following_now then
-    update profiles set following_count = following_count + 1 where id = new.source_id;
-    update profiles set followers_count = followers_count + 1 where id = new.destination_id;
+    update public.profiles set following_count = following_count + 1 where id = new.source_id;
+    update public.profiles set followers_count = followers_count + 1 where id = new.destination_id;
   end if;
 
   return coalesce(new, old);
 end;
-$$ language plpgsql;
+$$;
 
 create trigger relations_sync_follower_counts
   after insert or update or delete on relations
