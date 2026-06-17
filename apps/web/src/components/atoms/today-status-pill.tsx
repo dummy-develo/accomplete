@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 
 type TodayStatusPillProps = {
-  state: "checked-in" | "pending";
+  state: "checked-in" | "pending" | "overdue";
 };
 
 export function TodayStatusPill({ state }: TodayStatusPillProps) {
@@ -11,10 +11,14 @@ export function TodayStatusPill({ state }: TodayStatusPillProps) {
   // chromatic accent and carries the semantic — text stays muted.
   const baseClasses =
     "font-normal text-xs uppercase tracking-wide px-2 py-0.5 inline-flex items-center gap-1.5";
+
+  const config = {
+    "checked-in": { dot: "var(--status-success)", label: "Checked in" },
+    pending: { dot: "var(--status-pending)", label: "Pending" },
+    overdue: { dot: "var(--status-overdue)", label: "Overdue" },
+  }[state];
+
   const isDone = state === "checked-in";
-  const dotColor = isDone
-    ? "var(--status-success)"
-    : "var(--status-pending)";
 
   return (
     <Badge
@@ -24,9 +28,9 @@ export function TodayStatusPill({ state }: TodayStatusPillProps) {
       <span
         aria-hidden
         className="inline-block size-1.5 rounded-full"
-        style={{ backgroundColor: dotColor }}
+        style={{ backgroundColor: config.dot }}
       />
-      {isDone ? "Checked in" : "Pending"}
+      {config.label}
     </Badge>
   );
 }

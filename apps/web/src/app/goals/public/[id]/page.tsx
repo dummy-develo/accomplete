@@ -9,6 +9,7 @@ import { ArrowLeft } from "@phosphor-icons/react";
 import { AppShell } from "@/components/layout/app-shell";
 import { BackLink } from "@/components/atoms/back-link";
 import { Card, CardContent } from "@/components/ui/card";
+import { formatDate } from "@/lib/client-date";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -222,9 +223,7 @@ function StatCell({ label, value }: { label: string; value: number }) {
 }
 
 function MetaInfo({ goal }: { goal: Goal }) {
-  const deadline = goal.target_completion_at
-    ? new Date(goal.target_completion_at).toLocaleDateString()
-    : "—";
+  const deadline = formatDate(goal.target_completion_at);
 
   const benchmark = goal.benchmark_name ?? "hidden";
   const target = `${goal.benchmark_target_value ?? "—"} ${benchmark}`.trim();
@@ -379,9 +378,7 @@ function TimelineRow({
   dimmed: boolean;
   benchmarkName?: string | null;
 }) {
-  const date = item.timestamp
-    ? new Date(item.timestamp).toLocaleDateString()
-    : "—";
+  const date = formatDate(item.timestamp);
 
   let marker: React.ReactNode;
   let label: string;

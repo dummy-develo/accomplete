@@ -10,9 +10,14 @@ type Goal = any;
 type TodayGoalCardProps = {
   goal: Goal;
   checkedInToday: boolean;
+  overdue?: boolean;
 };
 
-export function TodayGoalCard({ goal, checkedInToday }: TodayGoalCardProps) {
+export function TodayGoalCard({
+  goal,
+  checkedInToday,
+  overdue = false,
+}: TodayGoalCardProps) {
   const now = new Date();
   const start = new Date(goal.created_at);
   const end = goal.target_completion_at
@@ -56,7 +61,11 @@ export function TodayGoalCard({ goal, checkedInToday }: TodayGoalCardProps) {
                 {goal.goal_name}
               </h3>
             </div>
-            <TodayStatusPill state={checkedInToday ? "checked-in" : "pending"} />
+            <TodayStatusPill
+              state={
+                overdue ? "overdue" : checkedInToday ? "checked-in" : "pending"
+              }
+            />
           </div>
 
           <ProgressWithMarker start={start} end={end} now={now} />
@@ -65,7 +74,15 @@ export function TodayGoalCard({ goal, checkedInToday }: TodayGoalCardProps) {
             <CardStat label="streak" value={streak} />
             <CardStat label="points" value={points} />
             {target && <CardStat label="target" value={target} />}
-            <CardStat label="left" value={`${daysLeft}d`} />
+            {overdue ? (
+              <CardStat
+                label="left"
+                value="overdue"
+                valueClassName="text-destructive"
+              />
+            ) : (
+              <CardStat label="left" value={`${daysLeft}d`} />
+            )}
           </div>
         </CardContent>
       </Card>
@@ -73,11 +90,26 @@ export function TodayGoalCard({ goal, checkedInToday }: TodayGoalCardProps) {
   );
 }
 
-function CardStat({ label, value }: { label: string; value: string | number }) {
+function CardStat({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: string | number;
+  valueClassName?: string;
+}) {
   return (
     <div className="flex items-baseline gap-1.5">
       <span className="text-muted-foreground">{label}</span>
-      <span className="font-mono tabular-nums text-foreground">{value}</span>
+      <span
+        className={cn(
+          "font-mono tabular-nums text-foreground",
+          valueClassName,
+        )}
+      >
+        {value}
+      </span>
     </div>
   );
 }

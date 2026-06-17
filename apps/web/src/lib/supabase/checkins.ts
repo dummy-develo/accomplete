@@ -1,6 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { scoreCheckin, scoreMilestoneReach } from "./scoring";
-import { calculateGlobalStreak, todayInTimezone } from "./streak";
+import { calculateGlobalStreak, todayInTimezone, localDateInTimezone } from "./streak";
 
 export async function getCheckinsByGoal(
     supabase: SupabaseClient,
@@ -25,7 +25,7 @@ export async function createCheckin(
     // Fetch goal with all fields needed for scoring
     const { data: goal, error: goalError } = await supabase
         .from('goals')
-        .select('id, user_id, checkin_value, score_checkin, score_milestone, last_checkin_date, current_streak, best_streak, status, is_deleted')
+        .select('id, user_id, checkin_value, score_checkin, score_milestone, last_checkin_date, current_streak, best_streak, status, is_deleted, target_completion_at')
         .eq('id', goalId)
         .eq('user_id', userId)
         .eq('status', 'active')
@@ -46,6 +46,23 @@ export async function createCheckin(
         .single();
 
     const today = todayInTimezone(profile?.timezone);
+
+    // Deadline gate: once the goal's target day has passed, it's "overdue" and
+    // frozen — the user must extend or complete it before checking in again.
+    // This is the real enforcement point: every check-in (UI or a raw API hit)
+    // flows through here, and "today" is derived from the user's stored
+    // timezone, never from the client. Comparison is by calendar day, so a
+    // check-in is still allowed *on* the target day, only blocked strictly past
+    // it. (`status` is already constrained to 'active' by the fetch above.)
+    if (goal.target_completion_at) {
+        const targetDay = localDateInTimezone(new Date(goal.target_completion_at), profile?.timezone);
+        if (targetDay < today) {
+            return {
+                data: null,
+                error: { message: "This goal's target date has passed — extend or complete it to keep checking in." },
+            };
+        }
+    }
 
     // Insert the check-in with 0 points initially — scoring updates it if earned
     const { data: checkin, error: checkinError } = await supabase

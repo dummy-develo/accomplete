@@ -10,9 +10,10 @@ import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { HeroStat } from "@/components/atoms/hero-stat";
 import { CheckInDialog } from "@/components/check-in-dialog";
+import { OverdueDialog } from "@/components/overdue-dialog";
 import { TodayGoalCard } from "@/components/today/goal-card";
 import { TodayRightRail } from "@/components/today/right-rail";
-import { todayInTimezone } from "@/lib/client-date";
+import { todayInTimezone, isGoalOverdue, formatMonoDate } from "@/lib/client-date";
 import {
   Sun,
   SunDim,
@@ -25,18 +26,6 @@ import {
 // Placeholder aliases — swap for real types from packages/shared later.
 type Profile = any;
 type Goal = any;
-
-function formatMonoDate(date: Date = new Date()): string {
-  const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(
-    date,
-  );
-  const rest = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-  }).format(date);
-  return `${weekday} · ${rest}`;
-}
 
 // Greeting paired with a time-of-day icon and a CSS-var tone. Keeping all
 // three in one function means the icon, label, and color always agree on
@@ -60,6 +49,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   // Goal currently being checked in via the dialog (null = dialog closed).
   const [checkInGoal, setCheckInGoal] = useState<Goal | null>(null);
+  // Goal whose deadline has passed, opened in the extend/complete dialog.
+  const [overdueGoal, setOverdueGoal] = useState<Goal | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -107,6 +98,7 @@ export default function Home() {
 
   const pending = goals.filter((g) => g.last_checkin_date !== today);
   const done = goals.filter((g) => g.last_checkin_date === today);
+  const isOverdue = (goal: Goal) => isGoalOverdue(goal, profile?.timezone);
 
   return (
     <AppShell
@@ -117,6 +109,8 @@ export default function Home() {
           hasGoals={goals.length > 0}
           todayMonoDate={monoDate}
           onCheckIn={setCheckInGoal}
+          isOverdue={isOverdue}
+          onOverdue={setOverdueGoal}
         />
       }
     >
@@ -188,6 +182,7 @@ export default function Home() {
                     key={g.id}
                     goal={g}
                     checkedInToday={g.last_checkin_date === today}
+                    overdue={isOverdue(g)}
                   />
                 ))}
               </div>
@@ -203,6 +198,15 @@ export default function Home() {
         }}
         goal={checkInGoal}
         timezone={profile?.timezone}
+        onSuccess={load}
+      />
+
+      <OverdueDialog
+        open={overdueGoal !== null}
+        onOpenChange={(open) => {
+          if (!open) setOverdueGoal(null);
+        }}
+        goal={overdueGoal}
         onSuccess={load}
       />
     </AppShell>

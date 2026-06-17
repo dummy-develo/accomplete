@@ -4,7 +4,7 @@
 // Layout: sidebar + main (no right rail).
 "use client";
 
-import { DotsThree } from "@phosphor-icons/react";
+import { DotsThree, WarningCircle } from "@phosphor-icons/react";
 import { BackLink } from "@/components/atoms/back-link";
 import {
   AlertDialog,
@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { HeroStat } from "@/components/atoms/hero-stat";
 import { CheckInDialog } from "@/components/check-in-dialog";
+import { OverdueDialog } from "@/components/overdue-dialog";
+import { isGoalOverdue, formatDate } from "@/lib/client-date";
 import { GoalDetailTimeline } from "@/components/goal-detail/timeline";
 import { MilestonesList } from "@/components/goal-detail/milestones-list";
 import Link from "next/link";
@@ -60,6 +62,7 @@ export default function GoalDetail() {
   const [timelineLoading, setTimelineLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [checkInOpen, setCheckInOpen] = useState(false);
+  const [overdueOpen, setOverdueOpen] = useState(false);
 
   const loadGoal = useCallback(async () => {
     setLoading(true);
@@ -132,16 +135,31 @@ export default function GoalDetail() {
 
       {!loading && !error && goal && (
         <>
-          <GoalHeader goal={goal} goalId={goalId} reloadGoal={loadGoal} />
-          <StatsRow goal={goal} checkinCount={checkins.length} />
+          <GoalHeader
+            goal={goal}
+            goalId={goalId}
+            reloadGoal={loadGoal}
+            overdue={isGoalOverdue(goal, timezone)}
+          />
+          <StatsRow
+            goal={goal}
+            checkinCount={checkins.length}
+            overdue={isGoalOverdue(goal, timezone)}
+          />
 
-          {goal.status === "active" && (
-            <section className="mt-10">
-              <Button size="lg" onClick={() => setCheckInOpen(true)}>
-                Check in for today
-              </Button>
-            </section>
-          )}
+          {goal.status === "active" &&
+            (isGoalOverdue(goal, timezone) ? (
+              <OverdueBanner
+                goal={goal}
+                onResolve={() => setOverdueOpen(true)}
+              />
+            ) : (
+              <section className="mt-10">
+                <Button size="lg" onClick={() => setCheckInOpen(true)}>
+                  Check in for today
+                </Button>
+              </section>
+            ))}
 
           <section className="mt-14">
             <SectionHeader>Timeline</SectionHeader>
@@ -181,12 +199,67 @@ export default function GoalDetail() {
           loadTimeline();
         }}
       />
+
+      <OverdueDialog
+        open={overdueOpen}
+        onOpenChange={setOverdueOpen}
+        goal={goal}
+        onSuccess={() => {
+          loadGoal();
+          loadTimeline();
+        }}
+      />
     </AppShell>
   );
 }
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return <h2 className="text-sm font-semibold mb-5">{children}</h2>;
+}
+
+// Replaces the check-in button when an active goal's deadline has passed. The
+// goal is frozen (check-ins are blocked server-side); the only ways forward
+// are to extend the deadline or complete the goal, both via OverdueDialog.
+function OverdueBanner({
+  goal,
+  onResolve,
+}: {
+  goal: Goal;
+  onResolve: () => void;
+}) {
+  const passedOn = goal.target_completion_at
+    ? formatDate(goal.target_completion_at)
+    : null;
+
+  return (
+    <section className="mt-10">
+      <div
+        className="rounded-xl border p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        style={{ borderColor: "var(--status-overdue)" }}
+      >
+        <div className="flex items-start gap-3">
+          <WarningCircle
+            size={20}
+            weight="fill"
+            className="shrink-0 mt-0.5"
+            style={{ color: "var(--status-overdue)" }}
+          />
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              Target date passed{passedOn ? ` on ${passedOn}` : ""}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Check-ins are paused. Extend the deadline or complete the goal to
+              continue.
+            </p>
+          </div>
+        </div>
+        <Button size="sm" onClick={onResolve} className="shrink-0">
+          Extend or complete
+        </Button>
+      </div>
+    </section>
+  );
 }
 
 function NotFound({ message }: { message: string }) {
@@ -208,10 +281,12 @@ function GoalHeader({
   goal,
   goalId,
   reloadGoal,
+  overdue,
 }: {
   goal: Goal;
   goalId: string;
   reloadGoal: () => Promise<void>;
+  overdue: boolean;
 }) {
   const category: string | null = goal.category ?? null;
   const target =
@@ -229,7 +304,7 @@ function GoalHeader({
                 {category}
               </Badge>
             )}
-            <StatusPill status={goal.status} />
+            <StatusPill status={goal.status} overdue={overdue} />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground break-words">
             {goal.goal_name}
@@ -253,7 +328,13 @@ function GoalHeader({
   );
 }
 
-function StatusPill({ status }: { status: string }) {
+function StatusPill({
+  status,
+  overdue,
+}: {
+  status: string;
+  overdue?: boolean;
+}) {
   if (status === "completed") {
     return (
       <Badge variant="secondary" className="font-normal">
@@ -268,6 +349,16 @@ function StatusPill({ status }: { status: string }) {
       </Badge>
     );
   }
+  if (overdue) {
+    return (
+      <Badge
+        variant="outline"
+        className="font-normal text-destructive border-destructive/50"
+      >
+        overdue
+      </Badge>
+    );
+  }
   return (
     <Badge variant="outline" className="font-normal">
       active
@@ -278,9 +369,11 @@ function StatusPill({ status }: { status: string }) {
 function StatsRow({
   goal,
   checkinCount,
+  overdue,
 }: {
   goal: Goal;
   checkinCount: number;
+  overdue: boolean;
 }) {
   const points =
     (goal.score_checkin ?? 0) +
@@ -289,10 +382,14 @@ function StatsRow({
   const currentStreak = goal.current_streak ?? 0;
   const bestStreak = goal.best_streak ?? 0;
 
-  // "Days left" only makes sense on an active goal. For completed/dropped,
-  // show a dash — the deadline is no longer relevant.
-  const daysLeft =
-    goal.status === "active" ? `${daysUntil(goal.target_completion_at)}d` : "—";
+  // "Days left" only makes sense on an active, on-time goal. Overdue shows
+  // "overdue"; completed/dropped show a dash — the deadline is no longer
+  // relevant.
+  const daysLeft = overdue
+    ? "overdue"
+    : goal.status === "active"
+      ? `${daysUntil(goal.target_completion_at)}d`
+      : "—";
 
   return (
     <section className="mt-10 grid grid-cols-2 md:grid-cols-5 gap-8">

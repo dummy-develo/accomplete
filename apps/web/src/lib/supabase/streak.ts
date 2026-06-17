@@ -6,14 +6,22 @@ import { SupabaseClient } from "@supabase/supabase-js";
 // or invalid — Intl throws on a bad timezone string, and we'd rather degrade
 // gracefully than 500 a check-in.
 export function todayInTimezone(timezone?: string | null): string {
+    return localDateInTimezone(new Date(), timezone);
+}
+
+// Same as todayInTimezone but for an arbitrary instant — returns the local
+// calendar date (YYYY-MM-DD) that `date` falls on in the given zone. Used to
+// compare a goal's target_completion_at (a timestamptz) against "today" by
+// calendar day rather than raw instant.
+export function localDateInTimezone(date: Date, timezone?: string | null): string {
     try {
         if (timezone) {
-            return new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date());
+            return new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(date);
         }
     } catch {
         // Invalid timezone string — fall through to UTC.
     }
-    return new Date().toISOString().split("T")[0];
+    return date.toISOString().split("T")[0];
 }
 
 // Returns the day before `today` (YYYY-MM-DD). Parses as UTC to avoid the

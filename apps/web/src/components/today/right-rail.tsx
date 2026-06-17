@@ -11,6 +11,10 @@ type TodayRightRailProps = {
   // Click handler for the per-goal "Check in" button on a pending card.
   // The parent opens the CheckInDialog with this goal.
   onCheckIn: (goal: Goal) => void;
+  // True when a pending goal's deadline has passed. An overdue card can't be
+  // checked in — its button opens the extend/complete dialog instead.
+  isOverdue: (goal: Goal) => boolean;
+  onOverdue: (goal: Goal) => void;
 };
 
 export function TodayRightRail({
@@ -19,6 +23,8 @@ export function TodayRightRail({
   hasGoals,
   todayMonoDate,
   onCheckIn,
+  isOverdue,
+  onOverdue,
 }: TodayRightRailProps) {
   return (
     <div>
@@ -33,7 +39,12 @@ export function TodayRightRail({
         </>
       ) : (
         <>
-          <PendingSection items={pending} onCheckIn={onCheckIn} />
+          <PendingSection
+            items={pending}
+            onCheckIn={onCheckIn}
+            isOverdue={isOverdue}
+            onOverdue={onOverdue}
+          />
           {done.length > 0 && <DoneSection items={done} />}
         </>
       )}
@@ -74,16 +85,26 @@ function AllDoneMessage() {
 function PendingSection({
   items,
   onCheckIn,
+  isOverdue,
+  onOverdue,
 }: {
   items: Goal[];
   onCheckIn: (goal: Goal) => void;
+  isOverdue: (goal: Goal) => boolean;
+  onOverdue: (goal: Goal) => void;
 }) {
   return (
     <section>
       <SectionHeader label="Pending" count={items.length} />
       <div className="flex flex-col gap-2">
         {items.map((goal) => (
-          <PendingCard key={goal.id} goal={goal} onCheckIn={onCheckIn} />
+          <PendingCard
+            key={goal.id}
+            goal={goal}
+            overdue={isOverdue(goal)}
+            onCheckIn={onCheckIn}
+            onOverdue={onOverdue}
+          />
         ))}
       </div>
     </section>
@@ -92,11 +113,35 @@ function PendingSection({
 
 function PendingCard({
   goal,
+  overdue,
   onCheckIn,
+  onOverdue,
 }: {
   goal: Goal;
+  overdue: boolean;
   onCheckIn: (goal: Goal) => void;
+  onOverdue: (goal: Goal) => void;
 }) {
+  // Overdue goals are frozen: the card is dimmed and the action no longer
+  // checks in — it opens the extend/complete dialog instead.
+  if (overdue) {
+    return (
+      <div className="border border-border rounded-md p-3 flex flex-col gap-2 bg-card/50 opacity-70">
+        <div className="text-sm truncate text-muted-foreground">
+          {goal.goal_name}
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full text-destructive"
+          onClick={() => onOverdue(goal)}
+        >
+          Overdue — resolve
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="border border-border rounded-md p-3 flex flex-col gap-2 bg-card surface-gloss">
       <div className="text-sm truncate text-foreground">{goal.goal_name}</div>

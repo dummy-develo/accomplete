@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/client-date";
 
 type Goal = any;
 type Milestone = any;
@@ -27,15 +28,6 @@ type Row = {
     | "goal-end";
   temporal: "past" | "today" | "future";
 };
-
-function formatDate(date: Date | null): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-  }).format(date);
-}
 
 export function GoalDetailTimeline({ goal, milestones, checkins }: TimelineProps) {
   const rows = buildRows(goal, milestones, checkins);

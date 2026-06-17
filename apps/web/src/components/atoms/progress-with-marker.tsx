@@ -1,16 +1,15 @@
+import { formatDate } from "@/lib/client-date";
+
 type ProgressWithMarkerProps = {
   start: Date;
   end: Date;
   now?: Date;
 };
 
-// "Sep 14" — short month + day, no year. Cards are tight; the year is
-// usually inferable from context and adds visual weight without info.
+// "14 Sep" — day + short month, no year. Cards are tight; the year is usually
+// inferable from context and adds visual weight without info.
 function formatShortDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "2-digit",
-  }).format(date);
+  return formatDate(date, { withYear: false });
 }
 
 export function ProgressWithMarker({

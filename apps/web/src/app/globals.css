@@ -128,9 +128,11 @@
 
   /* Status dots — only colors in the app outside --brand. Kept muted so they
      read as semantic accents, not decoration. Green for "done", amber for
-     "needs attention". No red for pending — red is for errors. */
+     "pending". Red is reserved for "overdue" (a frozen, past-deadline goal that
+     needs the user to extend or complete it) and errors. */
   --status-success: oklch(0.72 0.14 150);
   --status-pending: oklch(0.78 0.13 78);
+  --status-overdue: oklch(0.65 0.18 22);
 
   /* Greeting tone-of-day. A single muted accent per period; keeps the page
      from feeling beige without going rainbow. Used only on the small icon

@@ -16,7 +16,7 @@ import {
   NUMERIC_BOUNDS,
   clampToBounds,
 } from "@/lib/constants";
-import { todayInTimezone } from "@/lib/client-date";
+import { todayInTimezone, formatMonoDate } from "@/lib/client-date";
 
 type Goal = any;
 
@@ -32,18 +32,6 @@ type CheckInDialogProps = {
   // its data here so streaks / check-in pills update.
   onSuccess?: () => void;
 };
-
-function formatMonoDate(date: Date = new Date()): string {
-  const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(
-    date,
-  );
-  const rest = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-  }).format(date);
-  return `${weekday} · ${rest}`;
-}
 
 export function CheckInDialog({
   open,

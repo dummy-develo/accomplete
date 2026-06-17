@@ -1,17 +1,10 @@
+import { formatDate } from "@/lib/client-date";
+
 type Milestone = any;
 
 type MilestonesListProps = {
   milestones: Milestone[];
 };
-
-function formatDate(date: string | null): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-  }).format(new Date(date));
-}
 
 export function MilestonesList({ milestones }: MilestonesListProps) {
   if (milestones.length === 0) {
